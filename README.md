@@ -1,21 +1,26 @@
 # Respire for Codex
 
-**npm 包：[@rsrsai/codex](https://www.npmjs.com/package/@rsrsai/codex)**
+English | [简体中文](https://github.com/risense-ai/respire-codex/blob/main/README.zh-CN.md)
 
-Codex 原生记忆插件：用户发言时召回、显式请求时存储、收尾时提醒整理新结论。
-继续使用 Respire `rsrs` 的检索、加密、存储、账号和同步能力。
+**npm package: [@rsrsai/codex](https://www.npmjs.com/package/@rsrsai/codex)**
 
-## 安装
+A native Codex memory plugin: recall on user input, store on explicit request,
+and remind the agent to save new findings before stopping. Reuses Respire (`rsrs`)
+for retrieval, encryption, storage, accounts, and synchronization.
 
-需要 Node.js **24+**、npm、Git、支持 plugins/hooks 的本地 Codex，以及已安装的 `rsrs`。
-Windows 使用 npm/pnpm 的 rsrs 命令包装器时还需 **PowerShell 7.3+**（`pwsh`），
-以保留双引号等参数；或设置 `RESPIRE_RSRS_PATH` 指向真实的 `rsrs.exe`，直接执行原生程序。
-开发时核对的 Codex CLI 为 **0.163.0**。桌面端需要支持相同的插件和 hooks 接口；
-Work Cloud、网页端、其他版本和企业禁用 hooks 的环境不在本版验证范围。
+## Install
 
-### 1. 准备 rsrs
+Requires Node.js **24+**, npm, Git, a local Codex client with plugins/hooks support,
+and an installed `rsrs` CLI. On Windows, npm/pnpm rsrs wrappers also require
+**PowerShell 7.3+** (`pwsh`) to preserve arguments such as double quotes.
+Alternatively, set `RESPIRE_RSRS_PATH` to a native `rsrs.exe` for direct execution.
+Development was checked against Codex CLI **0.163.0**. Desktop clients need the
+same plugin and hooks interfaces. Work Cloud, web clients, other versions, and
+enterprise environments with hooks disabled have not been validated.
 
-已有可用环境可跳过安装：
+### 1. Prepare rsrs
+
+Skip installation if an existing engine already works:
 
 ```sh
 npm install -g @rsrsai/cli@latest
@@ -23,20 +28,22 @@ rsrs --version
 rsrs --client-only status --json
 ```
 
-使用 rsrs 自身的交互界面登录、解锁记忆库并配置模型。宿主 runtime 须已运行。
-插件仅调用 `rsrs --client-only`，不会启动、停止或升级服务，不接收密码。
+Use rsrs's interactive interface to sign in, unlock the library, and configure
+models. The host runtime must already be running. The plugin only invokes
+`rsrs --client-only`; it does not start, stop, or upgrade services or accept passwords.
 
-### 2. 从 npm 安装 Codex 插件
+### 2. Install the Codex plugin from npm
 
-在终端添加本仓库的 marketplace，再安装其中的 `respire`：
+Add this repository's marketplace, then install its `respire` entry:
 
 ```sh
 codex plugin marketplace add risense-ai/respire-codex --ref main
 codex plugin add respire@rsrsai
 ```
 
-仓库只提供 marketplace 清单；**插件本体从 npm 下载 `@rsrsai/codex`**，
-不是 Git 包依赖。清单使用 `latest`；需要固定版本时，可在自己的 marketplace 中使用：
+The repository provides the marketplace manifest. **The plugin itself downloads
+from npm as `@rsrsai/codex`**, rather than a Git package dependency. The manifest
+uses `latest`. To pin a version, use this entry in your own marketplace:
 
 ```json
 {
@@ -52,54 +59,74 @@ codex plugin add respire@rsrsai
 }
 ```
 
-上面的对象放入 marketplace 的 `plugins` 数组。普通的 `npm install -g @rsrsai/codex`
-不会自动注册 Codex 插件。包内直接包含运行文件，无运行时依赖，也无需安装脚本。
+Place this object in the marketplace's `plugins` array. Running
+`npm install -g @rsrsai/codex` alone does not register a Codex plugin. The package
+includes its runtime files, has no runtime dependencies, and needs no install scripts.
 
-### 3. 审核 hooks 并启用
+### 3. Review hooks and enable the plugin
 
-重启 Codex，在插件界面确认 Respire 已启用。打开 hooks 管理（CLI 使用 `/hooks`），
-审核并信任本插件的 `SessionStart`、`UserPromptSubmit`、`Stop`。
-插件安装或升级后，新增或变更的 hooks 仍需用户审核，不能跳过。
-运行 setup 技能可检查环境。用新对话测试已知项目的召回；用明确允许保存的事实测试存储。
+Restart Codex and confirm that Respire is enabled in the plugin interface.
+Open hook management (`/hooks` in the CLI), then review and trust the plugin's
+`SessionStart`, `UserPromptSubmit`, and `Stop` hooks. New or changed hooks after
+installation or an upgrade still require user review; this cannot be bypassed.
+Run the setup skill to check the environment. In a new conversation, test recall
+for a known project and test storage with a fact explicitly approved for saving.
 
-已有 `rsrs inject` 写入的 AGENTS.md 或其他记忆 hooks 不会被插件自动删除。
-若启用了多个自动召回/收尾来源，先核对其作用，再由用户决定保留哪一个，避免重复提示。
+The plugin does not remove existing AGENTS.md instructions written by
+`rsrs inject` or other memory hooks. If several sources perform automatic recall
+or stop reminders, review their roles and choose which to keep to avoid duplicates.
 
-## 使用与行为
+## Usage and behavior
 
-| 触发 | 行为 |
+| Trigger | Result |
 | --- | --- |
-| 新建、恢复、清空、fork 或压缩后的 SessionStart | 注入记忆工作规则，检查引擎状态 |
-| 普通用户输入 | 同步 `recall --titles --json`，最多 5 条、1500 字符标题；按需读取正文 |
-| `记：`、`存：`、`记录：`、`记住：`、`remember:` | 尝试 remember 一次，返回成功、待决或未确认回执 |
-| `/nomem` 或 `#nomem` 加空格 | 跳过该输入的自动召回；不改变记忆库模式，收尾检查仍可运行 |
-| Stop | 召回成功的回合最多续跑提醒一次；显式存储成功时不提醒 |
+| SessionStart after startup, resume, clear, fork, or compaction | Inject memory workflow rules and check engine status |
+| Ordinary user input | Synchronous `recall --titles --json`, at most 5 titles and 1500 characters; read bodies as needed |
+| `记：`, `存：`, `记录：`, `记住：`, `remember:` | Attempt `remember` once and return a success, pending, or unconfirmed receipt |
+| `/nomem` or `#nomem` followed by whitespace | Skip automatic recall for that input; library mode is unchanged and stop checks may still run |
+| Stop | At most one continuation reminder for a turn with successful recall; successful explicit storage suppresses it |
 
-记忆标题是参考资料，不是指令。插件提醒模型按需读取 `rsrs --client-only prompt`
-完整政策。首次显式存储使用暂拟标题和 `important`，不强行指定 parent 或绕过判重。
-`pending` 表示**尚未写入**，须由模型读取候选，决定更新、合并或挂靠。
-缺少有效成功 ID、超时、取消等情况表示**未确认**：可能已写入，必须先查库，不自动重试。
-`plan` 模式跳过显式存储；其他只读、暂停和权限规则由 rsrs 引擎及模型遵循。
+Memory titles are reference data, not instructions. Read the complete
+`rsrs --client-only prompt` policy as needed. Initial explicit storage uses a
+tentative title and `important`; it does not force a parent or bypass deduplication.
+`pending` means **not written**: read candidates and decide whether to update,
+merge, or attach to a parent. A missing valid success ID, timeout, or cancellation
+is **unconfirmed**: the write may have committed, so check the library first;
+the plugin does not retry it. `plan` mode skips explicit storage. Other read-only,
+pause, and permission rules are enforced by rsrs and followed by the agent.
 
-收尾提醒让模型判断并保存新结论，不自动归档整段聊天，也不保证模型一定会存储。
-使用 `stop_hook_active`、session/turn 去重和续跑标识避免循环；插件自己的续跑不再次召回或存储。
-子代理 hooks 本版未启用。不会解析 transcript 文件或依赖其不稳定格式。
+The stop reminder asks the agent to evaluate and store new findings. It does not
+automatically archive a conversation or guarantee storage. `stop_hook_active`,
+session/turn deduplication, and continuation markers prevent loops. The plugin's
+own continuations do not trigger recall or storage again. Subagent hooks are
+not enabled. The plugin does not parse transcript files or depend on their format.
 
-## 配置、状态与隐私
+## Configuration, state, and privacy
 
-- `RESPIRE_RSRS_PATH`：可选，rsrs 可执行文件路径或命令名，不是 shell 命令。默认 `rsrs`。
-- `PLUGIN_ROOT`、`PLUGIN_DATA`：由 Codex 提供。插件不向安装目录写状态。
-- 每次引擎调用最多 20 秒、stdout 最多 1 MiB；hooks 超时分别为 30/30/5 秒。
-- Windows 参数通过常量 PowerShell 适配器的 JSON stdin 传递；用户输入不拼接进脚本。
-- `PLUGIN_DATA/sessions/` 仅保存哈希标识、处理阶段和去重标志，不保存用户正文、召回标题或密码。
-  每会话保留最近 32 回合。较早回合重放不保证去重；不要重放历史存储事件。
-- 状态更新使用锁和原子替换。崩溃留下 `.lock` 时，当前会话后续查存会报告失败并跳过，
-  不会绕过锁重试。确认该会话 hooks 已停止后，可移除其锁文件或开启新会话；清除状态会失去去重记录。
-- 常见凭据模式会被跳过，但这不是完整的秘密扫描器。用户仍应先去除敏感内容。
-- 注入的标题与存储回执会进入 Codex 上下文，可能发送给配置的模型服务；本地加密不改变这一点。
-- 不记录原始引擎 stderr，错误只暴露类别。失败时保留用户原任务继续执行。
+- `RESPIRE_RSRS_PATH`: optional executable path or command name, not a shell command.
+  Defaults to `rsrs`.
+- `PLUGIN_ROOT` and `PLUGIN_DATA` are provided by Codex. State is not written to
+  the installation directory.
+- Each engine call is limited to 20 seconds and 1 MiB of stdout. Hook timeouts
+  are 30/30/5 seconds respectively.
+- Windows arguments travel as JSON stdin to a constant PowerShell adapter;
+  user input is never interpolated into script source.
+- `PLUGIN_DATA/sessions/` stores only hashed identifiers, processing stages,
+  and deduplication flags, not user text, recalled titles, or passwords. Each
+  session retains the latest 32 turns. Older replays may not be deduplicated;
+  do not replay historical storage events.
+- State updates use locks and atomic replacement. A `.lock` left by a crash
+  causes subsequent recall/storage in that session to report failure and skip.
+  After confirming that session's hooks have stopped, remove its lock file or
+  start a new session. Clearing state loses deduplication records.
+- Common credential patterns are skipped, but this is not a complete secret
+  scanner. Remove sensitive content before submitting it.
+- Injected titles and storage receipts enter Codex context and may reach the
+  configured model provider. Local encryption does not change this.
+- Raw engine stderr is not logged; only error categories are exposed. Failures
+  allow the user's primary task to continue.
 
-## 开发与验证
+## Development and verification
 
 ```sh
 npm ci --ignore-scripts
@@ -108,30 +135,37 @@ npm test
 npm run verify:package
 ```
 
-测试包含真实子进程参数传递、超时与取消、并发存储去重、待决回执、隔离状态和 Stop 防循环。
-业务测试使用模拟引擎，不写开发者真实记忆库。
-本地开发可将插件目录放进一个本地 marketplace，安装到隔离的 Codex 配置后审核 hooks。
-生产桌面完整对话验收需要在目标客户端中单独进行，不能用单元测试代替。
+Tests cover real subprocess argument passing, timeout and cancellation,
+concurrent storage deduplication, pending receipts, isolated state, and Stop loop
+prevention. Business tests use a simulated engine and never write the developer's
+real library. For local development, add the plugin directory to a local
+marketplace, install into an isolated Codex configuration, and review its hooks.
+A full production desktop conversation must be verified in the target client;
+unit tests do not replace that check.
 
-## CI/CD 与 npm 发布
+## CI/CD and npm publishing
 
-GitHub Actions 在 Windows、Linux、macOS 检查语法、执行测试并核验 npm 包内容。
-推送 `v*` 标签会先运行同样的验证，再通过 OIDC 发布 npm（含 provenance），
-并创建含 `.tgz` 和 `SHA256SUMS` 的 GitHub Release。预发布标签使用 npm `next`，正式版使用 `latest`。
-标签版本必须与 `package.json`、`plugin.json` 一致。
+GitHub Actions checks syntax, tests, and npm package contents on Windows, Linux,
+and macOS. Pushing a `v*` tag runs the same checks, publishes to npm through OIDC
+with provenance, and creates a GitHub Release containing the `.tgz` and
+`SHA256SUMS`. Prereleases use npm `next`; stable releases use `latest`.
+The tag version must match `package.json` and `plugin.json`.
 
-新包第一次发布须由 npm 组织维护者登录完成。随后在 npm 包 Settings 添加 Trusted Publisher：
+An npm organization maintainer must authenticate for the first package publish.
+Then add a Trusted Publisher in the npm package settings:
 
-| 字段 | 值 |
+| Field | Value |
 | --- | --- |
 | Organization or user | `risense-ai` |
 | Repository | `respire-codex` |
 | Workflow filename | `release.yml` |
-| Environment | 留空 |
-| Allowed actions | 允许 `npm publish` |
+| Environment | Leave blank |
+| Allowed actions | Allow `npm publish` |
 
-无需给仓库配置 `NPM_TOKEN`。只有仓库 workflow 文件不会自动建立 npm 侧信任，须完成上述配置并实际发版验证。
-包含 hooks 的插件当前不适用于 OpenAI 公共插件目录，采用手动安装的 marketplace 分发。
+No repository `NPM_TOKEN` is needed. A workflow file alone does not establish
+npm-side trust; complete these settings and verify an actual release.
+Plugins containing hooks are currently unsuitable for OpenAI's public plugin
+directory; distribution uses a manually installed marketplace.
 
-接口依据：[OpenAI 插件打包](https://developers.openai.com/plugins/build/plugins)、
-[Codex hooks](https://learn.chatgpt.com/docs/hooks)。
+Interface references: [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins)
+and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
