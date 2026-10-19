@@ -69,6 +69,7 @@ test('secret, skip, empty, plan and paused inputs do not write', async t => {
   await handleHook({ ...base, turn_id: 'plan', permission_mode: 'plan', prompt: '记：项目约定' }, options)
   assert.equal(calls, 0)
   assert.match(textOf(await handleHook({ ...base, turn_id: 'paused', prompt: '记：项目约定' }, options)), /未存/)
+  assert.deepEqual(await handleHook({ ...base, turn_id: 'paused', hook_event_name: 'Stop' }, options), {})
 })
 
 test('sessions are isolated and concurrent duplicate writes do not commit twice', async t => {
