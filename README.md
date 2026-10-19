@@ -44,7 +44,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
