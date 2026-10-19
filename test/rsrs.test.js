@@ -52,4 +52,8 @@ test('Windows native executable receives exact CRT arguments', { skip: process.p
   const input = '中文 "quotes" \\ slash\\ " & | $(echo unsafe)\nnext'
   const doc = await runRsrs(['recall', input], { executable: file })
   assert.deepEqual(doc.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', input, '--json'])
+  const wrapper = join(root, 'wrapper.ps1')
+  await writeFile(wrapper, '& (Join-Path $PSScriptRoot "argv.exe") @args; exit $LASTEXITCODE')
+  const wrapped = await runRsrs(['recall', input], { executable: wrapper })
+  assert.deepEqual(wrapped.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', input, '--json'])
 })
