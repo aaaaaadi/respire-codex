@@ -4,6 +4,42 @@ English | [简体中文](https://github.com/risense-ai/respire-codex/blob/main/R
 
 **npm package: [@rsrsai/codex](https://www.npmjs.com/package/@rsrsai/codex)**
 
+## Install with AI — copy this prompt
+
+Paste the entire prompt into **your local Codex chat**:
+
+```text
+Install the Respire memory plugin @rsrsai/codex for my local Codex. Read and
+follow https://github.com/risense-ai/respire-codex#readme, then perform the
+installation rather than only explaining the steps.
+
+Check Node.js 24+, npm, Git, and Codex plugin/hooks support. Reuse my existing
+rsrs environment; if rsrs is missing, install it with npm install -g @rsrsai/cli@latest.
+On Windows, check PowerShell 7.3+ for npm/pnpm rsrs wrappers, or configure
+RESPIRE_RSRS_PATH to an existing native rsrs.exe. Run rsrs --version and
+rsrs --client-only status --json. Report any required login, library unlock,
+model setup, or host runtime action for me to complete in rsrs; do not request
+secrets in chat or manage the runtime yourself.
+
+Check existing plugin/marketplace registration first to avoid duplicates. Add
+the marketplace if missing with:
+codex plugin marketplace add risense-ai/respire-codex --ref main
+Then install its npm-backed entry if missing with:
+codex plugin add respire@rsrsai
+Use the npm package, not a Git package dependency. Do not replace my memory
+library, account configuration, AGENTS.md, or other existing hooks.
+
+Verify that Respire is installed and enabled. Tell me when to restart Codex
+and open /hooks to personally review and trust SessionStart, UserPromptSubmit,
+and Stop; do not bypass hook trust. Run the plugin's setup skill when available.
+After restart and trust review, verify recall in a new chat. Ask me for a
+non-sensitive test fact before testing storage, and verify the resulting record.
+Verify the stop reminder in a separate turn with successful recall and no
+successful explicit store.
+Report the installed version, checks actually performed, and any remaining
+user actions. Do not claim hooks or end-to-end behavior work before checking them.
+```
+
 A native Codex memory plugin: recall on user input, store on explicit request,
 and remind the agent to save new findings before stopping. Reuses Respire (`rsrs`)
 for retrieval, encryption, storage, accounts, and synchronization.

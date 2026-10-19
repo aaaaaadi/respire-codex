@@ -4,6 +4,36 @@
 
 **npm 包：[@rsrsai/codex](https://www.npmjs.com/package/@rsrsai/codex)**
 
+## 让 AI 安装：复制这段提示词
+
+将下面整段发送给**本地 Codex 对话中的助手**：
+
+```text
+请为我的本地 Codex 安装 Respire 记忆插件 @rsrsai/codex。
+先阅读并遵循 https://github.com/risense-ai/respire-codex/blob/main/README.zh-CN.md，
+然后实际执行安装，不要只解释步骤。
+
+检查 Node.js 24+、npm、Git 和 Codex plugins/hooks 支持。复用现有 rsrs 环境；
+仅在未安装 rsrs 时运行 npm install -g @rsrsai/cli@latest。
+Windows 使用 npm/pnpm rsrs 包装器时检查 PowerShell 7.3+，或将 RESPIRE_RSRS_PATH
+配置为已有的原生 rsrs.exe。运行 rsrs --version 和 rsrs --client-only status --json。
+若需要登录、解锁记忆库、配置模型或处理宿主 runtime，请指出具体待办，让我在 rsrs 中完成；
+不要在聊天中索取秘密，也不要自行管理 runtime。
+
+先检查已有插件和 marketplace 注册，避免重复。尚未添加 marketplace 时执行：
+codex plugin marketplace add risense-ai/respire-codex --ref main
+尚未安装插件时执行：
+codex plugin add respire@rsrsai
+插件本体使用 npm 包，不使用 Git 包依赖。保留现有记忆库、账号配置、AGENTS.md 和其他 hooks。
+
+确认 Respire 已安装且启用。告诉我何时重启 Codex，并打开 /hooks 亲自审核和信任
+SessionStart、UserPromptSubmit、Stop，不得绕过 hooks 信任审核。
+插件 setup 技能可用时运行检查。重启和审核后，在新对话中验证召回；
+先向我要一条无敏感内容的测试事实，再验证存储及其实际记录。
+在另一个召回成功且未显式存储成功的回合验证收尾提醒。
+最后报告安装版本、实际执行的检查和仍需我完成的操作。未经检查，不要声称 hooks 或完整链路已可用。
+```
+
 Codex 原生记忆插件：用户发言时召回、显式请求时存储、收尾时提醒整理新结论。
 继续使用 Respire `rsrs` 的检索、加密、存储、账号和同步能力。
 
