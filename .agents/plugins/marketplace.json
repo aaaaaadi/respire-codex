@@ -1,0 +1,10 @@
+{
+  "name": "rsrsai",
+  "interface": { "displayName": "Respire" },
+  "plugins": [{
+    "name": "respire",
+    "source": { "source": "npm", "package": "@rsrsai/codex", "version": "latest", "registry": "https://registry.npmjs.org" },
+    "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
+    "category": "Productivity"
+  }]
+}

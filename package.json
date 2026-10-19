@@ -1,0 +1,19 @@
+{
+  "name": "@rsrsai/codex",
+  "version": "0.1.0",
+  "description": "Respire memory hooks for Codex: recall, explicit storage and bounded stop reminders",
+  "type": "module",
+  "license": "MIT",
+  "author": "risense-ai",
+  "repository": { "type": "git", "url": "https://github.com/risense-ai/respire-codex.git" },
+  "homepage": "https://github.com/risense-ai/respire-codex#readme",
+  "engines": { "node": ">=24" },
+  "publishConfig": { "access": "public", "registry": "https://registry.npmjs.org/" },
+  "files": ["plugin.json", "hooks", "lib", "skills", "README.md", "LICENSE"],
+  "scripts": {
+    "check": "node --check lib/hook.js && node --check lib/memory.js && node --check lib/rsrs.js && node --check lib/state.js",
+    "test": "node --test test/*.test.js",
+    "verify:package": "node scripts/check-package.js",
+    "release:package": "node scripts/release.js"
+  }
+}
