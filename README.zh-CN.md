@@ -45,6 +45,11 @@ Windows 使用 npm/pnpm 的 rsrs 命令包装器时还需 **PowerShell 7.3+**（
 开发时核对的 Codex CLI 为 **0.163.0**。桌面端需要支持相同的插件和 hooks 接口；
 Work Cloud、网页端、其他版本和企业禁用 hooks 的环境不在本版验证范围。
 
+插件使用 `.codex-plugin/plugin.json` 兼容 Codex 0.163.0。该版本会跳过根目录
+Agent Plugins `plugin.json` 格式的 hooks，即使插件已经启用。不要同时添加根清单。
+`hooks/hooks.json` 随插件安装到缓存目录，不会另行创建 `~/.codex/hooks.json`。
+hooks 审核信任后，由 `SessionStart` 注入记忆规则，无需单独保留 AGENTS.md 记忆提示词。
+
 ### 1. 准备 rsrs
 
 已有可用环境可跳过安装：
@@ -150,7 +155,7 @@ npm run verify:package
 GitHub Actions 在 Windows、Linux、macOS 检查语法、执行测试并核验 npm 包内容。
 推送 `v*` 标签会先运行同样的验证，再通过 OIDC 发布 npm（含 provenance），
 并创建含 `.tgz` 和 `SHA256SUMS` 的 GitHub Release。预发布标签使用 npm `next`，正式版使用 `latest`。
-标签版本必须与 `package.json`、`plugin.json` 一致。
+标签版本必须与 `package.json`、`.codex-plugin/plugin.json` 一致。
 
 新包第一次发布须由 npm 组织维护者登录完成。随后在 npm 包 Settings 添加 Trusted Publisher：
 

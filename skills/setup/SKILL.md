@@ -14,6 +14,11 @@ does not trust hooks: the user must review SessionStart, UserPromptSubmit and St
 in the Codex hooks UI (`/hooks` in the CLI). Don't bypass trust or disable other
 hooks. After plugin changes, restart the client and use a new chat to verify it.
 
+In Codex 0.163.0, zero installed hooks is a loading failure, not a trust failure.
+Check that the package has `.codex-plugin/plugin.json`, no root `plugin.json`,
+and `hooks/hooks.json`. That version skips hooks from Agent Plugins manifests.
+Do not create a second user hooks.json to mask a broken plugin install.
+
 Offer a recall check with a known, non-sensitive project term. An empty result is
 valid and isn't proof of a broken installation. Only test storage with a fact the
 user explicitly asks to save; inspect the receipt and don't retry an unconfirmed

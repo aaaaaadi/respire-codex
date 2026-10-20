@@ -54,6 +54,13 @@ Development was checked against Codex CLI **0.163.0**. Desktop clients need the
 same plugin and hooks interfaces. Work Cloud, web clients, other versions, and
 enterprise environments with hooks disabled have not been validated.
 
+This package uses `.codex-plugin/plugin.json` for Codex 0.163.0 compatibility.
+That version skips hooks from root Agent Plugins `plugin.json` manifests, even
+when the plugin is enabled. Do not add a root `plugin.json` alongside the
+compatibility manifest. Hooks ship in the installed plugin's `hooks/hooks.json`;
+installation does not create `~/.codex/hooks.json`. Once the hooks are trusted,
+`SessionStart` supplies the memory instructions without a separate AGENTS.md block.
+
 ### 1. Prepare rsrs
 
 Skip installation if an existing engine already works:
@@ -185,7 +192,7 @@ GitHub Actions checks syntax, tests, and npm package contents on Windows, Linux,
 and macOS. Pushing a `v*` tag runs the same checks, publishes to npm through OIDC
 with provenance, and creates a GitHub Release containing the `.tgz` and
 `SHA256SUMS`. Prereleases use npm `next`; stable releases use `latest`.
-The tag version must match `package.json` and `plugin.json`.
+The tag version must match `package.json` and `.codex-plugin/plugin.json`.
 
 An npm organization maintainer must authenticate for the first package publish.
 Then add a Trusted Publisher in the npm package settings:
