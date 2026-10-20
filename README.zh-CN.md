@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.1",
+    "version": "0.1.3",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -103,6 +103,46 @@ codex plugin add respire@rsrsai
 若启用了多个自动召回/收尾来源，先核对其作用，再由用户决定保留哪一个，避免重复提示。
 
 ## 使用与行为
+
+安装并审核 hooks 后，打开**新对话**即可使用，无需另加系统提示词或 AGENTS.md 记忆块。例如：
+
+```text
+项目发布流程之前有哪些约定？
+记住：发布检查清单必须包含新会话召回验证。
+/nomem 解释这段小代码，跳过自动记忆召回。
+```
+
+普通问题由 hook 注入匹配标题，模型再读取相关正文。只保存你希望长期保留的事实。
+存储回执带有实际记录 ID 才表示写入成功；只有 `pending` 不算成功。
+
+### 升级
+
+更新 marketplace，然后安装其中当前的 npm 版本：
+
+```sh
+codex plugin marketplace upgrade rsrsai
+codex plugin add respire@rsrsai
+```
+
+重启 Codex，在插件详情确认版本，并在 `/hooks` 审核变更过的 hooks。
+若还安装了 `rsrsai-local` 等开发来源，只启用本次要使用的 Respire 安装，避免重复触发。
+
+### 用新会话验收
+
+1. 在 `/hooks` 确认 Respire 三个 hooks 均已列出并信任。
+2. 新建对话，询问已有记忆中的事实，查看 SessionStart 和 UserPromptSubmit 活动。
+   仅安装成功或手动运行 `rsrs recall` 不能证明这条链路可用。
+3. 保存一条明确允许保存的测试事实，核对记录 ID，再开另一个新对话召回它，验证跨会话持久化。
+4. 另用一个召回成功、没有显式存储成功的回合验证 Stop。
+   `Blocked by hook` 表示 hook 要求模型在结束前续跑一次记忆检查，不表示 rsrs 引擎故障。
+
+需要排除旧提示词干扰时，先备份，再临时关闭自己的旧记忆提示词或其他记忆 hooks，保留并恢复无关规则。
+不要删除记忆库，也不要把旧对话已经教过模型如何使用 rsrs 当成插件验收成功。
+
+若 `/hooks` 中 Respire 数量为零，检查是否启用了正确的安装，以及包内是否有
+`.codex-plugin/plugin.json` 和 `hooks/hooks.json`；不会自动创建用户级 hooks.json。
+若已列出但未激活，检查信任状态并重启。若 hook 报引擎错误，先运行
+`rsrs --client-only status --json` 和 setup 技能；Windows 还应检查 `pwsh`，不要先靠补提示词绕过问题。
 
 | 触发 | 行为 |
 | --- | --- |

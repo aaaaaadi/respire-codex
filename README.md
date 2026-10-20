@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.1",
+    "version": "0.1.3",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -120,6 +120,55 @@ The plugin does not remove existing AGENTS.md instructions written by
 or stop reminders, review their roles and choose which to keep to avoid duplicates.
 
 ## Usage and behavior
+
+Start a **new chat** after installation and hook review. No separate system prompt
+or AGENTS.md memory block is required. For example:
+
+```text
+What decisions did we make about the project release process?
+remember: The release checklist must include a new-session recall check.
+/nomem Explain this small code snippet without automatic memory recall.
+```
+
+For the first question, the hook supplies matching titles; the agent reads the
+relevant records. Only save facts you intend to retain. A storage receipt with
+an actual record ID confirms a write; `pending` alone does not.
+
+### Upgrade
+
+Refresh the marketplace and install its current npm-backed entry:
+
+```sh
+codex plugin marketplace upgrade rsrsai
+codex plugin add respire@rsrsai
+```
+
+Restart Codex, confirm the version in the plugin details, and review changed
+hooks in `/hooks`. Enable only the intended Respire installation if you also
+installed a development marketplace such as `rsrsai-local`.
+
+### Check a new session
+
+1. Confirm all three Respire hooks appear in `/hooks` and are trusted.
+2. Open a new chat and ask about a known stored fact. Check hook activity for
+   SessionStart and UserPromptSubmit; installing the plugin or directly running
+   `rsrs recall` does not verify this path.
+3. Save an approved test fact, verify its record ID, then open another new chat
+   and ask for it to check persistence across sessions.
+4. In a separate successful recall turn without an explicit successful write,
+   check the Stop reminder. `Blocked by hook` means the hook requests one more
+   agent continuation to check memory before ending; it is not an rsrs failure.
+
+To isolate plugin behavior, back up and temporarily disable only the old memory
+instructions or other memory hooks you own, then restore unrelated rules. Do
+not delete your library. Never approve a test merely because old chat history
+already told the agent how to use rsrs.
+
+If `/hooks` shows zero Respire hooks, check that the intended installation is
+enabled and contains `.codex-plugin/plugin.json` and `hooks/hooks.json`. If hooks
+are listed but inactive, review their trust status and restart. If a hook reports
+an engine error, run `rsrs --client-only status --json` and the setup skill; check
+Windows `pwsh` availability before changing prompts.
 
 | Trigger | Result |
 | --- | --- |
