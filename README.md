@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -146,6 +146,20 @@ codex plugin add respire@rsrsai
 Restart Codex, confirm the version in the plugin details, and review changed
 hooks in `/hooks`. Enable only the intended Respire installation if you also
 installed a development marketplace such as `rsrsai-local`.
+
+If installation still reports the previous version just after a release, the
+npm metadata may be cached. Wait for the new version to appear on the official
+registry, then request fresh metadata for this command. In PowerShell:
+
+```powershell
+$env:npm_config_prefer_online = 'true'
+codex plugin add respire@rsrsai --json
+Remove-Item Env:npm_config_prefer_online
+```
+
+If that environment variable already has a value, restore it instead of removing
+it. Check the returned version before testing; reinstalling the old version is
+not an upgrade. There is no need to uninstall the plugin or delete its state.
 
 ### Check a new session
 

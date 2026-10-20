@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.3",
+    "version": "0.1.4",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -126,6 +126,18 @@ codex plugin add respire@rsrsai
 
 重启 Codex，在插件详情确认版本，并在 `/hooks` 审核变更过的 hooks。
 若还安装了 `rsrsai-local` 等开发来源，只启用本次要使用的 Respire 安装，避免重复触发。
+
+刚发版时若安装结果仍是旧版本，可能是 npm 元数据缓存。先等官方仓库能查到新版本，
+再为这一次命令请求新元数据。PowerShell 示例：
+
+```powershell
+$env:npm_config_prefer_online = 'true'
+codex plugin add respire@rsrsai --json
+Remove-Item Env:npm_config_prefer_online
+```
+
+若该环境变量原本已有值，应恢复原值而非删除。以命令返回的版本号为准；装回旧版本不算升级。
+无需卸载插件或删除插件状态。
 
 ### 用新会话验收
 
