@@ -26,6 +26,7 @@ test('recall injects bounded titles and stops only once, including new continuat
   const stop = { ...base, hook_event_name: 'Stop', stop_hook_active: false }
   const reminder = await handleHook(stop, options)
   assert.equal(reminder.decision, 'block')
+  assert.equal(reminder.suppressOutput, true)
   assert.deepEqual(await handleHook(stop, options), {})
   assert.deepEqual(await handleHook({ ...base, turn_id: 'continuation', prompt: reminder.reason }, options), {})
   assert.deepEqual(await handleHook({ ...stop, turn_id: 'continuation' }, options), {})

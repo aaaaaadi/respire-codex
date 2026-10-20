@@ -122,6 +122,10 @@ codex plugin add respire@rsrsai
 使用 `stop_hook_active`、session/turn 去重和续跑标识避免循环；插件自己的续跑不再次召回或存储。
 子代理 hooks 本版未启用。不会解析 transcript 文件或依赖其不稳定格式。
 
+Stop 输出带 `suppressOutput: true`，仍保留续跑和提醒全文。Codex 0.163.0
+会解析但忽略该字段，当前仍显示反馈。这只是兼容请求，不能保证未来客户端
+会隐藏阻断式 Stop 反馈；尚未确认官方实现排期。
+
 ## 配置、状态与隐私
 
 - `RESPIRE_RSRS_PATH`：可选，rsrs 可执行文件路径或命令名，不是 shell 命令。默认 `rsrs`。

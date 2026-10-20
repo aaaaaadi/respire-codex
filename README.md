@@ -144,6 +144,11 @@ session/turn deduplication, and continuation markers prevent loops. The plugin's
 own continuations do not trigger recall or storage again. Subagent hooks are
 not enabled. The plugin does not parse transcript files or depend on their format.
 
+Stop output requests `suppressOutput: true` while preserving the continuation
+and reminder text. Codex 0.163.0 parses but ignores this field: the feedback
+remains visible. This is a compatibility request, not a promise that future
+clients will hide blocking Stop feedback; no implementation schedule is confirmed.
+
 ## Configuration, state, and privacy
 
 - `RESPIRE_RSRS_PATH`: optional executable path or command name, not a shell command.
