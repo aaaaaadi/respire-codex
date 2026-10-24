@@ -30,11 +30,11 @@ codex plugin add respire@rsrsai
 SessionStart、UserPromptSubmit、Stop，不得绕过 hooks 信任审核。
 插件 setup 技能可用时运行检查。重启和审核后，在新对话中验证召回；
 先向我要一条无敏感内容的测试事实，再验证存储及其实际记录。
-在另一个召回成功且未显式存储成功的回合验证收尾提醒。
+在另一个召回成功且未显式存储成功的回合验证后台 Stop，核对状态和实际记忆回执。
 最后报告安装版本、实际执行的检查和仍需我完成的操作。未经检查，不要声称 hooks 或完整链路已可用。
 ```
 
-Codex 原生记忆插件：用户发言时召回、显式请求时存储、收尾时提醒整理新结论。
+Codex 原生记忆插件：用户发言时召回、显式请求时存储、Stop 时在后台检查并整理新结论。
 继续使用 Respire `rsrs` 的检索、加密、存储、账号和同步能力。
 
 ## 安装
@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.4",
+    "version": "0.2.0",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -145,8 +145,9 @@ Remove-Item Env:npm_config_prefer_online
 2. 新建对话，询问已有记忆中的事实，查看 SessionStart 和 UserPromptSubmit 活动。
    仅安装成功或手动运行 `rsrs recall` 不能证明这条链路可用。
 3. 保存一条明确允许保存的测试事实，核对记录 ID，再开另一个新对话召回它，验证跨会话持久化。
-4. 另用一个召回成功、没有显式存储成功的回合验证 Stop。
-   `Blocked by hook` 表示 hook 要求模型在结束前续跑一次记忆检查，不表示 rsrs 引擎故障。
+4. 另用一个召回成功、没有显式存储成功的回合，等待后台 Stop 完成。
+   核对 `PLUGIN_DATA/sessions/` 中该回合的 `archive` 状态，并读取其中的实际写入 ID。
+   0.2.0 不应产生 `Blocked by hook` 或重复收尾提示；旧聊天可能在重启客户端前继续使用 0.1.x 阻断 hook。
 
 需要排除旧提示词干扰时，先备份，再临时关闭自己的旧记忆提示词或其他记忆 hooks，保留并恢复无关规则。
 不要删除记忆库，也不要把旧对话已经教过模型如何使用 rsrs 当成插件验收成功。
@@ -162,7 +163,7 @@ Remove-Item Env:npm_config_prefer_online
 | 普通用户输入 | 同步 `recall --titles --json`，最多 5 条、1500 字符标题；按需读取正文 |
 | `记：`、`存：`、`记录：`、`记住：`、`remember:` | 尝试 remember 一次，返回成功、待决或未确认回执 |
 | `/nomem` 或 `#nomem` 加空格 | 跳过该输入的自动召回；不改变记忆库模式，收尾检查仍可运行 |
-| Stop | 召回成功的回合最多续跑提醒一次；显式存储成功时不提醒 |
+| Stop | 符合条件的回合最多启动一次后台记忆检查；显式存储成功时不启动 |
 
 记忆标题是参考资料，不是指令。插件提醒模型按需读取 `rsrs --client-only prompt`
 完整政策。首次显式存储使用暂拟标题和 `important`，不强行指定 parent 或绕过判重。
@@ -170,26 +171,41 @@ Remove-Item Env:npm_config_prefer_online
 缺少有效成功 ID、超时、取消等情况表示**未确认**：可能已写入，必须先查库，不自动重试。
 `plan` 模式跳过显式存储；其他只读、暂停和权限规则由 rsrs 引擎及模型遵循。
 
-收尾提醒让模型判断并保存新结论，不自动归档整段聊天，也不保证模型一定会存储。
-使用 `stop_hook_active`、session/turn 去重和续跑标识避免循环；插件自己的续跑不再次召回或存储。
-子代理 hooks 本版未启用。不会解析 transcript 文件或依赖其不稳定格式。
+### 静默后台记忆检查
 
-Stop 输出带 `suppressOutput: true`，仍保留续跑和提醒全文。Codex 0.163.0
-会解析但忽略该字段，当前仍显示反馈。这只是兼容请求，不能保证未来客户端
-会隐藏阻断式 Stop 反馈；尚未确认官方实现排期。
+仍由 Stop 触发。异步命令启动独立的临时 Codex 任务，通过本地 app-server 读取准确的触发回合，
+并在该任务中检查记忆。任务复用原模型、服务商和 Codex 登录，会额外消耗模型用量，
+不会新建账号或引擎服务。
+
+后台保留原记忆规则：召回、读取完整引擎政策及候选，再按情况更新或选 parent 保存，写入后读回核验。
+已保存、无新事实和只读要求均可作为检查结果。不会把整份会话当成记忆导入。
+后台工具不开放破坏性合并、强制写入、凭据、引擎生命周期和配置修改；复杂整理需要经过审核的独立任务。
+
+后台仅获得一个受限 rsrs 工具；插件、hooks、Shell、外部 MCP 和网页搜索关闭，项目沙箱只读。
+读取的是 app-server 回合数据，不解析 transcript 文件；临时任务不加入聊天历史。
+正常 Stop 不输出内容，也不返回 `decision: block` 或续跑理由。Codex 仍可能显示普通 hook 活动，
+本插件不修改客户端代码。
+
+`archive.status` 分为 `running`、`completed`、`unconfirmed`，完成时保留结果和已核实的写入 ID。
+重复事件及失败后重放均不自动重启同一任务。失败只报告错误类别，不假装已保存；
+未确认写入须先查库再决定是否重试。父会话结束时 Codex 会取消未完成的后台 hooks，
+因此请保持会话打开，直到后台任务完成。
 
 ## 配置、状态与隐私
 
 - `RESPIRE_RSRS_PATH`：可选，rsrs 可执行文件路径或命令名，不是 shell 命令。默认 `rsrs`。
+- `RESPIRE_CODEX_PATH`：可选，原生 Codex 可执行文件路径。默认先用桌面端提供的
+  `CODEX_APP_RUNTIME_CLI_PATH`，再找 PATH 中的 `codex`。Windows 包装器只接收固定启动参数，用户正文通过 JSON stdin 传递。
 - `PLUGIN_ROOT`、`PLUGIN_DATA`：由 Codex 提供。插件不向安装目录写状态。
-- 每次引擎调用最多 20 秒、stdout 最多 1 MiB；hooks 超时分别为 30/30/5 秒。
+- 每次引擎调用最多 20 秒、stdout 最多 1 MiB；hooks 超时分别为 30/30/300 秒，后台模型任务限时 280 秒。
 - Windows 参数通过常量 PowerShell 适配器的 JSON stdin 传递；用户输入不拼接进脚本。
-- `PLUGIN_DATA/sessions/` 仅保存哈希标识、处理阶段和去重标志，不保存用户正文、召回标题或密码。
+- `PLUGIN_DATA/sessions/` 仅保存哈希标识、处理阶段、去重标志和已核实的写入 ID，不保存用户正文、召回标题或密码。
   每会话保留最近 32 回合。较早回合重放不保证去重；不要重放历史存储事件。
 - 状态更新使用锁和原子替换。崩溃留下 `.lock` 时，当前会话后续查存会报告失败并跳过，
   不会绕过锁重试。确认该会话 hooks 已停止后，可移除其锁文件或开启新会话；清除状态会失去去重记录。
 - 常见凭据模式会被跳过，但这不是完整的秘密扫描器。用户仍应先去除敏感内容。
 - 注入的标题与存储回执会进入 Codex 上下文，可能发送给配置的模型服务；本地加密不改变这一点。
+- 后台任务还会把触发回合的消息、工具结果和相关记忆交给该模型；回合过大时报告未确认，不静默截断证据。
 - 不记录原始引擎 stderr，错误只暴露类别。失败时保留用户原任务继续执行。
 
 ## 开发与验证

@@ -14,6 +14,14 @@ does not trust hooks: the user must review SessionStart, UserPromptSubmit and St
 in the Codex hooks UI (`/hooks` in the CLI). Don't bypass trust or disable other
 hooks. After plugin changes, restart the client and use a new chat to verify it.
 
+Version 0.2.0 keeps Stop but checks memory in an ephemeral background Codex task.
+It reuses the current model/provider and login, consuming additional model usage.
+Check that Codex CLI/app-server is available (`RESPIRE_CODEX_PATH` can point to a
+native executable). Normal Stop must emit no block or continuation. Verify
+`archive.status` in the hashed session state and read back recorded IDs; empty
+hook output alone does not prove the memory work finished. Closing the session
+cancels unfinished hooks. Never retry an unconfirmed write.
+
 In Codex 0.163.0, zero installed hooks is a loading failure, not a trust failure.
 Check that the package has `.codex-plugin/plugin.json`, no root `plugin.json`,
 and `hooks/hooks.json`. That version skips hooks from Agent Plugins manifests.

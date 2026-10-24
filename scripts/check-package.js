@@ -14,11 +14,12 @@ for (const name of ['SessionStart', 'UserPromptSubmit', 'Stop']) {
   const hook = hooks[name][0].hooks[0]
   assert.equal(hook.type, 'command')
   assert.ok(hook.command.includes('process.env.PLUGIN_ROOT'))
-  assert.ok(hook.timeout <= 30)
+  assert.ok(hook.timeout <= (name === 'Stop' ? 300 : 30))
+  if (name === 'Stop') assert.equal(hook.async, true)
 }
 const [packed] = JSON.parse(execFileSync(process.execPath, [process.env.npm_execpath, 'pack', '--dry-run', '--ignore-scripts', '--json'], { encoding: 'utf8' }))
 const files = packed.files.map(file => file.path)
-for (const file of ['.codex-plugin/plugin.json', 'hooks/hooks.json', 'lib/hook.js', 'lib/memory.js', 'lib/rsrs.js', 'lib/state.js', 'skills/setup/SKILL.md', 'README.md', 'LICENSE']) assert.ok(files.includes(file), file)
+for (const file of ['.codex-plugin/plugin.json', 'hooks/hooks.json', 'lib/hook.js', 'lib/memory.js', 'lib/rsrs.js', 'lib/state.js', 'lib/codex.js', 'lib/archive.js', 'skills/setup/SKILL.md', 'README.md', 'LICENSE']) assert.ok(files.includes(file), file)
 assert.ok(!files.includes('plugin.json'), 'Codex 0.163.0 skips hooks from root Agent Plugins manifests')
 assert.ok(files.every(file => !/^(test|scripts|\.verification|node_modules|\.github)\//.test(file)))
 console.log(`Verified ${packed.filename}: ${files.length} files`)

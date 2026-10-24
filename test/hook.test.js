@@ -15,21 +15,20 @@ const textOf = output => output.hookSpecificOutput?.additionalContext ?? ''
 async function fixture(t, call = async () => ({ status: 'ok', details: [hit] })) {
   const dataDir = await mkdtemp(join(tmpdir(), 'respire codex '))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
-  return { dataDir, call }
+  return { dataDir, call, archive: async () => ({ result: 'nothing-to-store', records: [], calls: 2 }) }
 }
 
-test('recall injects bounded titles and stops only once, including new continuation turn ids', async t => {
+test('recall injects bounded titles and archives silently only once', async t => {
   const calls = []
   const options = await fixture(t, async args => { calls.push(args); return { status: 'ok', details: [hit] } })
   assert.match(textOf(await handleHook(base, options)), /自动召回.*\n.*12345678/s)
   assert.equal(calls[0][0], 'recall')
   const stop = { ...base, hook_event_name: 'Stop', stop_hook_active: false }
-  const reminder = await handleHook(stop, options)
-  assert.equal(reminder.decision, 'block')
-  assert.equal(reminder.suppressOutput, true)
+  let archives = 0
+  options.archive = async () => { archives++; return { result: 'nothing-to-store', records: [], calls: 2 } }
   assert.deepEqual(await handleHook(stop, options), {})
-  assert.deepEqual(await handleHook({ ...base, turn_id: 'continuation', prompt: reminder.reason }, options), {})
-  assert.deepEqual(await handleHook({ ...stop, turn_id: 'continuation' }, options), {})
+  assert.deepEqual(await handleHook(stop, options), {})
+  assert.equal(archives, 1)
   assert.equal(calls.length, 1)
   await handleHook({ ...base, turn_id: 'next-user' }, options)
   assert.equal(calls.length, 2)
@@ -89,7 +88,7 @@ test('Stop guards missing turn, active continuation, failed recall and duplicate
   assert.deepEqual(await handleHook(stop, options), {})
   await handleHook(base, options)
   assert.deepEqual(await handleHook({ ...stop, stop_hook_active: true }, options), {})
-  assert.equal((await handleHook(stop, options)).decision, 'block')
+  assert.deepEqual(await handleHook(stop, options), {})
   const failure = await fixture(t, async () => { throw new Error('timeout') })
   await handleHook(base, failure)
   assert.deepEqual(await handleHook(stop, failure), {})
@@ -139,5 +138,5 @@ test('packaged command runs through the real platform shell with spaces in PLUGI
   child.stdout.on('data', data => { stdout += data })
   child.stdin.end(input)
   await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(Error(`exit ${code}`))) })
-  assert.deepEqual(JSON.parse(stdout), {})
+  assert.equal(stdout.trim(), '')
 })

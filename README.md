@@ -34,14 +34,14 @@ and open /hooks to personally review and trust SessionStart, UserPromptSubmit,
 and Stop; do not bypass hook trust. Run the plugin's setup skill when available.
 After restart and trust review, verify recall in a new chat. Ask me for a
 non-sensitive test fact before testing storage, and verify the resulting record.
-Verify the stop reminder in a separate turn with successful recall and no
-successful explicit store.
+Verify the background Stop worker in a separate turn with successful recall
+and no successful explicit store. Check its state and actual memory receipt.
 Report the installed version, checks actually performed, and any remaining
 user actions. Do not claim hooks or end-to-end behavior work before checking them.
 ```
 
 A native Codex memory plugin: recall on user input, store on explicit request,
-and remind the agent to save new findings before stopping. Reuses Respire (`rsrs`)
+and check new findings in a quiet background task at Stop. Reuses Respire (`rsrs`)
 for retrieval, encryption, storage, accounts, and synchronization.
 
 ## Install
@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.1.4",
+    "version": "0.2.0",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -170,8 +170,10 @@ not an upgrade. There is no need to uninstall the plugin or delete its state.
 3. Save an approved test fact, verify its record ID, then open another new chat
    and ask for it to check persistence across sessions.
 4. In a separate successful recall turn without an explicit successful write,
-   check the Stop reminder. `Blocked by hook` means the hook requests one more
-   agent continuation to check memory before ending; it is not an rsrs failure.
+   let the background Stop worker finish. Check the turn's `archive` state under
+   `PLUGIN_DATA/sessions/` and read back its recorded memory IDs. Version 0.2.0
+   must not emit `Blocked by hook` or a repeated Stop prompt. Old chats can retain
+   the 0.1.x blocking hook until the client is restarted.
 
 To isolate plugin behavior, back up and temporarily disable only the old memory
 instructions or other memory hooks you own, then restore unrelated rules. Do
@@ -190,7 +192,7 @@ Windows `pwsh` availability before changing prompts.
 | Ordinary user input | Synchronous `recall --titles --json`, at most 5 titles and 1500 characters; read bodies as needed |
 | `记：`, `存：`, `记录：`, `记住：`, `remember:` | Attempt `remember` once and return a success, pending, or unconfirmed receipt |
 | `/nomem` or `#nomem` followed by whitespace | Skip automatic recall for that input; library mode is unchanged and stop checks may still run |
-| Stop | At most one continuation reminder for a turn with successful recall; successful explicit storage suppresses it |
+| Stop | At most one background memory check per eligible turn; successful explicit storage suppresses it |
 
 Memory titles are reference data, not instructions. Read the complete
 `rsrs --client-only prompt` policy as needed. Initial explicit storage uses a
@@ -201,29 +203,49 @@ is **unconfirmed**: the write may have committed, so check the library first;
 the plugin does not retry it. `plan` mode skips explicit storage. Other read-only,
 pause, and permission rules are enforced by rsrs and followed by the agent.
 
-The stop reminder asks the agent to evaluate and store new findings. It does not
-automatically archive a conversation or guarantee storage. `stop_hook_active`,
-session/turn deduplication, and continuation markers prevent loops. The plugin's
-own continuations do not trigger recall or storage again. Subagent hooks are
-not enabled. The plugin does not parse transcript files or depend on their format.
+### Quiet background memory checks
 
-Stop output requests `suppressOutput: true` while preserving the continuation
-and reminder text. Codex 0.163.0 parses but ignores this field: the feedback
-remains visible. This is a compatibility request, not a promise that future
-clients will hide blocking Stop feedback; no implementation schedule is confirmed.
+Stop remains the trigger. Its asynchronous command starts an ephemeral Codex
+task, reads the exact triggering turn through the local app-server, and checks
+memory there. It reuses the original model/provider and Codex login, consuming
+additional model usage. It does not create accounts or engine services.
+
+The worker receives the original memory rules: recall, read the full engine
+policy and candidates, then update or attach a new fact as appropriate. Writes
+must be read back. Already stored facts, no new facts and read-only instructions
+are valid outcomes. It does not import an entire conversation as a memory.
+Destructive merges, forced writes, credentials, engine lifecycle and configuration
+changes are excluded from its tool; complex maintenance needs a reviewed task.
+
+The worker has one restricted rsrs tool. Plugins, hooks, shell execution,
+external MCP and web search are disabled; its workspace sandbox is read-only.
+It uses app-server turn data, not transcript-file parsing. The ephemeral task is
+not added to chat history. Normal Stop emits no output and never returns
+`decision: block` or a continuation reason. Codex can still show ordinary hook
+activity; no client code is modified.
+
+`archive.status` records `running`, `completed` or `unconfirmed`, with the result
+and verified write IDs on completion. Replayed events never restart the same
+worker, including after a failure. Failure reports a category warning; it never
+claims storage succeeded. Check the library before retrying an unconfirmed
+write. Codex cancels unfinished background hooks when the parent session ends;
+keep it open until the worker completes.
 
 ## Configuration, state, and privacy
 
 - `RESPIRE_RSRS_PATH`: optional executable path or command name, not a shell command.
   Defaults to `rsrs`.
+- `RESPIRE_CODEX_PATH`: optional native Codex executable path. Defaults to the
+  desktop's `CODEX_APP_RUNTIME_CLI_PATH`, then `codex` on PATH. Windows wrappers
+  receive constant startup arguments; user text travels through JSON stdin.
 - `PLUGIN_ROOT` and `PLUGIN_DATA` are provided by Codex. State is not written to
   the installation directory.
 - Each engine call is limited to 20 seconds and 1 MiB of stdout. Hook timeouts
-  are 30/30/5 seconds respectively.
+  are 30/30/300 seconds respectively; the background model task is limited to 280 seconds.
 - Windows arguments travel as JSON stdin to a constant PowerShell adapter;
   user input is never interpolated into script source.
 - `PLUGIN_DATA/sessions/` stores only hashed identifiers, processing stages,
-  and deduplication flags, not user text, recalled titles, or passwords. Each
+  deduplication flags and verified write IDs, not user text, recalled titles, or passwords. Each
   session retains the latest 32 turns. Older replays may not be deduplicated;
   do not replay historical storage events.
 - State updates use locks and atomic replacement. A `.lock` left by a crash
@@ -234,6 +256,9 @@ clients will hide blocking Stop feedback; no implementation schedule is confirme
   scanner. Remove sensitive content before submitting it.
 - Injected titles and storage receipts enter Codex context and may reach the
   configured model provider. Local encryption does not change this.
+- The background task also sends the triggering turn's messages, tool results
+  and relevant memories to that model. Oversized turns are reported as
+  unconfirmed rather than silently truncating the evidence.
 - Raw engine stderr is not logged; only error categories are exposed. Failures
   allow the user's primary task to continue.
 

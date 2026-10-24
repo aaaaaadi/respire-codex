@@ -18,8 +18,9 @@
     "Stop": [{ "hooks": [{
       "type": "command",
       "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main())\"",
-      "timeout": 5,
-      "statusMessage": "Checking memory findings"
+      "async": true,
+      "timeout": 300,
+      "statusMessage": "Organizing Respire memory in background"
     }] }]
   }
 }
