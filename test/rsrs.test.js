@@ -22,7 +22,16 @@ test('real child transports Unicode, quotes, newlines and shell metacharacters v
   })
   const input = '中文 "quoted" & | $(echo unsafe);\nnext'
   const doc = await runRsrs(['recall', input], { executable: file })
-  assert.deepEqual(doc.details, ['--client-only', 'recall', input, '--json'])
+  assert.deepEqual(doc.details, ['--client-only', 'recall', '--json', input])
+})
+
+test('nested command JSON options stay on the parent and comma IDs stay intact', async t => {
+  const file = await executable(t, {
+    windows: 'if ($args[2] -ne "--json") { exit 2 }; ConvertTo-Json -Compress -Depth 8 @{status="ok"; details=@($args)}',
+    posix: 'if(process.argv[4]!=="--json")process.exit(2);console.log(JSON.stringify({status:"ok",details:process.argv.slice(2)}))',
+  })
+  const doc = await runRsrs(['query-log', 'mark', '--good', '9ee30807,b198db11'], { executable: file })
+  assert.deepEqual(doc.details, ['--client-only', 'query-log', '--json', 'mark', '--good', '9ee30807,b198db11'])
 })
 
 test('malformed and unavailable executable return category only', async t => {
@@ -51,9 +60,9 @@ test('Windows native executable receives exact CRT arguments', { skip: process.p
   execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', 'Add-Type -TypeDefinition (Get-Content -LiteralPath $env:ARGV_SOURCE -Raw) -OutputAssembly $env:ARGV_EXE -OutputType ConsoleApplication'], { env: { ...process.env, ARGV_SOURCE: source, ARGV_EXE: file }, windowsHide: true })
   const input = '中文 "quotes" \\ slash\\ " & | $(echo unsafe)\nnext'
   const doc = await runRsrs(['recall', input], { executable: file })
-  assert.deepEqual(doc.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', input, '--json'])
+  assert.deepEqual(doc.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', '--json', input])
   const wrapper = join(root, 'wrapper.ps1')
   await writeFile(wrapper, '& (Join-Path $PSScriptRoot "argv.exe") @args; exit $LASTEXITCODE')
   const wrapped = await runRsrs(['recall', input], { executable: wrapper })
-  assert.deepEqual(wrapped.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', input, '--json'])
+  assert.deepEqual(wrapped.details.split('.').map(value => Buffer.from(value, 'base64').toString('utf8')), ['--client-only', 'recall', '--json', input])
 })

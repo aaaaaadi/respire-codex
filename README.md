@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.0",
+    "version": "0.2.1",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
