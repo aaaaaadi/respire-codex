@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -177,6 +177,9 @@ Remove-Item Env:npm_config_prefer_online
 并在该任务中检查记忆。任务复用原模型、服务商和 Codex 登录，会额外消耗模型用量，
 不会新建账号或引擎服务。
 
+0.2.2 先读取不含历史的会话元数据，再分页定位触发回合，只加载该回合正文。
+长会话不再需要先通过一次全量历史响应，才能开始记忆收尾。
+
 后台保留原记忆规则：召回、读取完整引擎政策及候选，再按情况更新或选 parent 保存，写入后读回核验。
 已保存、无新事实和只读要求均可作为检查结果。不会把整份会话当成记忆导入。
 后台工具不开放破坏性合并、强制写入、凭据、引擎生命周期和配置修改；复杂整理需要经过审核的独立任务。
@@ -187,7 +190,9 @@ Remove-Item Env:npm_config_prefer_online
 本插件不修改客户端代码。
 
 `archive.status` 分为 `running`、`completed`、`unconfirmed`，完成时保留结果和已核实的写入 ID。
-重复事件及失败后重放均不自动重启同一任务。失败只报告错误类别，不假装已保存；
+重复事件及失败后重放均不自动重启同一任务。失败时在 `archive.request` 和警告中保留
+可用的请求方法与 JSON-RPC 错误码；原始上游错误保留在进程内错误的 `cause`，
+不把原始错误正文或数据写入持久状态。失败不假装已保存；
 未确认写入须先查库再决定是否重试。父会话结束时 Codex 会取消未完成的后台 hooks，
 因此请保持会话打开，直到后台任务完成。
 
@@ -199,7 +204,7 @@ Remove-Item Env:npm_config_prefer_online
 - `PLUGIN_ROOT`、`PLUGIN_DATA`：由 Codex 提供。插件不向安装目录写状态。
 - 每次引擎调用最多 20 秒、stdout 最多 1 MiB；hooks 超时分别为 30/30/300 秒，后台模型任务限时 280 秒。
 - Windows 参数通过常量 PowerShell 适配器的 JSON stdin 传递；用户输入不拼接进脚本。
-- `PLUGIN_DATA/sessions/` 仅保存哈希标识、处理阶段、去重标志和已核实的写入 ID，不保存用户正文、召回标题或密码。
+- `PLUGIN_DATA/sessions/` 仅保存哈希标识、处理阶段、去重标志、已核实的写入 ID 及安全的请求诊断（方法/错误码），不保存用户正文、召回标题或密码。
   每会话保留最近 32 回合。较早回合重放不保证去重；不要重放历史存储事件。
 - 状态更新使用锁和原子替换。崩溃留下 `.lock` 时，当前会话后续查存会报告失败并跳过，
   不会绕过锁重试。确认该会话 hooks 已停止后，可移除其锁文件或开启新会话；清除状态会失去去重记录。

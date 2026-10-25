@@ -4,7 +4,8 @@ import { spawn } from 'node:child_process'
 import { memoryTools, archiveTurn } from '../lib/archive.js'
 import { connectCodex } from '../lib/codex.js'
 import { handleHook } from '../lib/hook.js'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { keyOf } from '../lib/state.js'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -74,15 +75,32 @@ test('an empty successful recall still permits policy reading and an authorized 
 test('background worker reads the exact turn, exposes a memory tool and verifies completion', async () => {
   let settings
   let closed = false
+  let input
+  const reads = []
   const result = await archiveTurn({ session_id: 'parent', turn_id: 'target', cwd: process.cwd(), model: 'inherited-model' }, {
     call: async () => ({ status: 'ok', summary: { id } }),
     connect: options => ({
       notify() {}, close() { closed = true }, exited: new Promise(() => {}),
       async request(method, params) {
         if (method === 'config/read') return { config: { mcp_servers: { external: { enabled: true } } } }
-        if (method === 'thread/read') return { thread: { modelProvider: 'configured-provider', turns: [{ id: 'target', items: [{ type: 'userMessage', content: [{ type: 'text', text: 'read-only project check' }] }, { type: 'agentMessage', text: 'checked' }] }] } }
+        if (method === 'thread/read') {
+          assert.equal(params.includeTurns, false)
+          return { thread: { modelProvider: 'configured-provider' } }
+        }
+        if (method === 'thread/turns/list') {
+          reads.push(params)
+          assert.equal(params.limit, 1)
+          assert.equal(params.sortDirection, 'desc')
+          if (!params.cursor) {
+            assert.equal(params.itemsView, 'notLoaded')
+            return { data: [{ id: 'unrelated' }], nextCursor: 'older' }
+          }
+          assert.equal(params.cursor, 'older')
+          return { data: [{ id: 'target', items: params.itemsView === 'full' ? [{ type: 'userMessage', content: [{ type: 'text', text: 'read-only project check' }] }, { type: 'agentMessage', text: 'checked' }] : [] }], nextCursor: null }
+        }
         if (method === 'thread/start') { settings = params; return { thread: { id: 'worker' } } }
         if (method === 'turn/start') {
+          input = params.input[0].text
           for (const command of ['recall', 'prompt', 'show']) {
             const response = await options.onRequest({ method: 'item/tool/call', params: { tool: 'respire_memory', arguments: read(command) } })
             assert.equal(response.success, true)
@@ -94,6 +112,9 @@ test('background worker reads the exact turn, exposes a memory tool and verifies
       },
     }),
   })
+  assert.deepEqual(reads.map(page => page.itemsView), ['notLoaded', 'notLoaded', 'full'])
+  assert.match(input, /read-only project check/)
+  assert.ok(!input.includes('unrelated'))
   assert.equal(settings.ephemeral, true)
   assert.equal(settings.sandbox, 'read-only')
   assert.equal(settings.config.features.hooks, false)
@@ -107,6 +128,26 @@ test('background worker reads the exact turn, exposes a memory tool and verifies
   assert.equal(closed, true)
 })
 
+
+test('missing and oversized target turns fail before any memory write', async () => {
+  for (const oversized of [false, true]) {
+    const result = archiveTurn({ session_id: 'parent', turn_id: 'target', cwd: process.cwd() }, {
+      call: async () => { assert.fail('must not call memory') },
+      connect: () => ({
+        notify() {}, close() {}, exited: new Promise(() => {}),
+        async request(method, params) {
+          if (method === 'config/read') return { config: {} }
+          if (method === 'thread/read') { assert.equal(params.includeTurns, false); return { thread: {} } }
+          if (method === 'thread/turns/list') return { data: oversized ? [{ id: 'target', items: params.itemsView === 'full' ? [{ type: 'agentMessage', text: 'x'.repeat(256001) }] : [] }] : [], nextCursor: null }
+          assert.notEqual(method, 'thread/start')
+          return {}
+        },
+      }),
+    })
+    await assert.rejects(result, oversized ? /archive-context-limit/ : /turn-not-readable/)
+  }
+})
+
 test('Stop releases its state lock, records failure and never retries a replay', async t => {
   const dataDir = await mkdtemp(join(tmpdir(), 'respire archive '))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
@@ -116,7 +157,7 @@ test('Stop releases its state lock, records failure and never retries a replay',
   const running = new Promise(resolve => { started = resolve })
   const wait = new Promise(resolve => { release = resolve })
   let archives = 0
-  const options = { dataDir, call: async () => ({ status: 'ok', details: [] }), archive: async () => { archives++; started(); await wait; throw new Error('unconfirmed') } }
+  const options = { dataDir, call: async () => ({ status: 'ok', details: [] }), archive: async () => { archives++; started(); await wait; throw Object.assign(new Error('codex-request-failed'), { method: 'thread/turns/list', rpcCode: -32602, cause: { message: 'private upstream content' } }) } }
   await handleHook(event, options)
   const stop = { ...event, hook_event_name: 'Stop' }
   const work = handleHook(stop, options)
@@ -124,14 +165,19 @@ test('Stop releases its state lock, records failure and never retries a replay',
   await handleHook({ ...event, turn_id: 'two' }, options)
   assert.deepEqual(await handleHook(stop, options), {})
   release()
-  assert.match((await work).systemMessage, /archive-unconfirmed/)
+  const warning = (await work).systemMessage
+  assert.match(warning, /codex-request-failed.*thread\/turns\/list.*-32602/)
+  const state = JSON.parse(await readFile(join(dataDir, 'sessions', `${keyOf(event.session_id)}.json`), 'utf8'))
+  assert.deepEqual(state.turns[keyOf(event.turn_id)].archive, { status: 'unconfirmed', error: 'codex-request-failed', request: { method: 'thread/turns/list', code: -32602 } })
+  assert.ok(!JSON.stringify(state).includes('private upstream content'))
+  assert.ok(!warning.includes('private upstream content'))
   assert.deepEqual(await handleHook(stop, options), {})
   assert.equal(archives, 1)
 })
 
 test('Codex JSON transport handles a real subprocess, Unicode and cancellation', async () => {
   const abort = new AbortController()
-  const script = `const rl=require('node:readline').createInterface({input:process.stdin});rl.on('line',line=>{const m=JSON.parse(line);console.log(JSON.stringify({id:m.id,result:m.params}))})`
+  const script = `const rl=require('node:readline').createInterface({input:process.stdin});rl.on('line',line=>{const m=JSON.parse(line);console.log(JSON.stringify(m.method==='fail'?{id:m.id,error:{code:-32602,message:'private upstream content',data:{stage:'read'}}}:{id:m.id,result:m.params}))})`
   const client = connectCodex({ signal: abort.signal, spawnProcess: (file, args, options) => {
     assert.ok(args.includes('hooks'))
     assert.ok(args.includes('mcp_servers={}'))
@@ -139,6 +185,13 @@ test('Codex JSON transport handles a real subprocess, Unicode and cancellation',
   } })
   const value = { text: '中文 "quotes"\nsecond line & $()' }
   assert.deepEqual(await client.request('echo', value), value)
+  await assert.rejects(client.request('fail', {}), error => {
+    assert.equal(error.message, 'codex-request-failed')
+    assert.equal(error.method, 'fail')
+    assert.equal(error.rpcCode, -32602)
+    assert.deepEqual(error.cause, { code: -32602, message: 'private upstream content', data: { stage: 'read' } })
+    return true
+  })
   abort.abort()
   await assert.rejects(client.request('echo', value), /cancelled/)
   await client.exited

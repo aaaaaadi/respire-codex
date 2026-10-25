@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.1",
+    "version": "0.2.2",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -210,6 +210,10 @@ task, reads the exact triggering turn through the local app-server, and checks
 memory there. It reuses the original model/provider and Codex login, consuming
 additional model usage. It does not create accounts or engine services.
 
+Version 0.2.2 reads thread metadata without history, pages through turn headers,
+and loads only the matching triggering turn. A long conversation no longer has
+to fit into one full-history response before memory checks can begin.
+
 The worker receives the original memory rules: recall, read the full engine
 policy and candidates, then update or attach a new fact as appropriate. Writes
 must be read back. Already stored facts, no new facts and read-only instructions
@@ -226,7 +230,10 @@ activity; no client code is modified.
 
 `archive.status` records `running`, `completed` or `unconfirmed`, with the result
 and verified write IDs on completion. Replayed events never restart the same
-worker, including after a failure. Failure reports a category warning; it never
+worker, including after a failure. Failures preserve the request method and
+JSON-RPC error code in `archive.request` and the warning when available. The
+original upstream error remains available as the in-process error's `cause`;
+raw error messages and data are not copied into persistent state. Failure never
 claims storage succeeded. Check the library before retrying an unconfirmed
 write. Codex cancels unfinished background hooks when the parent session ends;
 keep it open until the worker completes.
@@ -245,7 +252,8 @@ keep it open until the worker completes.
 - Windows arguments travel as JSON stdin to a constant PowerShell adapter;
   user input is never interpolated into script source.
 - `PLUGIN_DATA/sessions/` stores only hashed identifiers, processing stages,
-  deduplication flags and verified write IDs, not user text, recalled titles, or passwords. Each
+  deduplication flags, verified write IDs and safe request diagnostics (method/code),
+  not user text, recalled titles, or passwords. Each
   session retains the latest 32 turns. Older replays may not be deduplicated;
   do not replay historical storage events.
 - State updates use locks and atomic replacement. A `.lock` left by a crash
