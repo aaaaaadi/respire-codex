@@ -6,21 +6,21 @@
       "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main())\"",
       "timeout": 30,
       "additionalContextLimit": 2000,
-      "statusMessage": "正在检查记忆服务"
+      "statusMessage": "Checking memory"
     }] }],
     "UserPromptSubmit": [{ "hooks": [{
       "type": "command",
       "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main())\"",
       "timeout": 30,
       "additionalContextLimit": 2000,
-      "statusMessage": "正在召回记忆"
+      "statusMessage": "Recalling memory"
     }] }],
     "Stop": [{ "hooks": [{
       "type": "command",
       "command": "node -e \"import(require('node:url').pathToFileURL(process.env.PLUGIN_ROOT+'/lib/hook.js')).then(m=>m.main())\"",
       "async": true,
       "timeout": 300,
-      "statusMessage": "正在后台整理记忆"
+      "statusMessage": "Saving memory"
     }] }]
   }
 }
