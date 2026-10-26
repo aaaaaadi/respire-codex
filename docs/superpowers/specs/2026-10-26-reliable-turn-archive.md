@@ -1,15 +1,25 @@
-# Reliable current-turn memory archival
-## Approved scope
-Repair the Codex plugin locally, preserve an official rollback package, push a feature branch to the user's Fork, and wait for user acceptance before opening an upstream PR. Keep the existing Runtime and library.
-## Approaches
-A fixed last-N window still overflows on one large turn and repeats old material. Final-answer-only extraction loses corrections and evidence. Use the approved current-turn compaction plus bounded, read-only extraction for oversized turns.
-## Design
-- Empty successful recall (skip with count=0) remains eligible for Stop. Paused/error responses remain ineligible.
-- Preserve complete user/assistant text in ordered source fragments. Represent tool calls with bounded head/tail evidence, status and an explicit partial marker.
-- Direct archival uses at most 64,000 serialized characters. Larger inputs are split into <=48,000-character chunks; at most 12 chunks. Reject larger inputs explicitly before any write.
-- Each extraction worker has no tools. It produces <=6,000 characters of evidence-linked JSON candidates and restrictions. Only one final worker may access memory and write after ALL chunks are extracted. Candidates remain untrusted summaries; retain original user messages/restrictions, source references and final outcomes for verification.
-- The final candidate envelope is bounded to 128,000 characters. For user fragments too long to inline, a read-only current-turn evidence tool must read every original user fragment before any write.
-- Keep the 280-second total timeout; record safe stage/coverage/counts on failure. No retry of uncertain writes, no transcript content persisted in hook state. Readback remains mandatory.
-- Mark coverage as partial when tool output was trimmed; never infer unseen evidence. No automatic replay of old failed hooks.
-## Acceptance
-Regression tests must cover empty vs paused recall, oversized tool output, long dialogue split/reassembly, corrections/authorization preservation, extraction failure before writes, cancellation, duplicate Stop and receipt/readback. Exercise actual model/Runtime paths using authorized real facts, not fabricated memory records. Desktop natural hook acceptance is separate from a shell-driven probe.
+# 当前回合可靠归档方案
+
+## 已授权范围
+
+在本机修复 Codex 插件，保留官方版本作为回退包，将功能分支推送至用户 Fork；待用户测试确认后再向官方提交 PR。保留现有 Runtime 与记忆库。
+
+## 方案选择
+
+固定取最近 N 回合仍可能被单个长回合撑满，也会重复处理旧内容。仅提炼最终回答会丢失纠正和证据。因此采用已确认的“当前回合整理＋超长分段只读提炼”。
+
+## 设计
+
+- 成功但空召回（skip 且 count=0）仍允许 Stop 归档；暂停和错误响应不允许。
+- 按顺序完整保留用户与助手文本及来源片段；工具输出仅保留有上限的首尾证据、状态和明确的部分截取标记。
+- 直接归档最多 64000 个序列化字符；超出后每段最多 48000 字符，最多 12 段。超过总分段上限时，在写入前明确失败。
+- 每个提炼工作进程不提供工具，输出最多 6000 字符、关联来源的 JSON 候选与限制。全部分段成功后，只有一个最终工作进程可访问记忆并写入。候选只是待核实摘要，必须保留原始用户消息、限制、来源和最终结果以便验证。
+- 最终候选上下文最多 128000 字符。用户片段过长无法内联时，必须通过只读当前回合证据工具读完全部原始用户片段，方可写入。
+- 保留 280 秒总超时；失败时记录安全的阶段、覆盖范围和计数。禁止重试不确定写入，钩子状态不保存对话正文，写后必须回读。
+- 工具输出截取后标记部分证据覆盖，不推断未见证据，不自动重放旧失败钩子。
+
+## 验收
+
+回归测试覆盖空召回与暂停召回区别、超长工具输出、长对话分段重组、纠正与授权保留、提炼失败前禁止写入、取消、重复 Stop、实际回执与回读。
+
+使用已授权的真实事实验证实际模型和 Runtime 调用链，不制造虚构测试记忆。桌面自然触发钩子的验收，与终端驱动的受控验证分别报告。
