@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.2",
+    "version": "0.2.3",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -221,7 +221,7 @@ are valid outcomes. It does not import an entire conversation as a memory.
 Destructive merges, forced writes, credentials, engine lifecycle and configuration
 changes are excluded from its tool; complex maintenance needs a reviewed task.
 
-The worker has one restricted rsrs tool. Plugins, hooks, shell execution,
+The final worker has a restricted rsrs tool and, after compaction or segmentation, a read-only current-turn evidence tool. Extraction workers have no tools. Plugins, hooks, shell execution,
 external MCP and web search are disabled; its workspace sandbox is read-only.
 It uses app-server turn data, not transcript-file parsing. The ephemeral task is
 not added to chat history. Normal Stop emits no output and never returns
@@ -237,6 +237,24 @@ raw error messages and data are not copied into persistent state. Failure never
 claims storage succeeded. Check the library before retrying an unconfirmed
 write. Codex cancels unfinished background hooks when the parent session ends;
 keep it open until the worker completes.
+
+### Large turns and segmented archival (0.2.3)
+
+- Successful zero-hit recall (`skip/count=0`) still permits Stop; paused, error and unknown skip responses do not.
+- The existing 256,000-character direct budget remains. Ordinary turns retain their full text and tool evidence.
+- Only over-budget turns compact long tool previews to at most 6,000 head and 6,000 tail characters with explicit `PARTIAL` markers.
+  Original tool fragments remain in worker memory for bounded source-ID reads, including omitted middles; transcript text is not persisted.
+- User and assistant text is never clipped. If prepared evidence still exceeds the budget, up to twelve 48,000-character chunks are extracted by tool-free ephemeral workers.
+  Each returns at most 6,000 characters of source-linked candidates. All extractions must succeed before one final worker reconciles and writes.
+- The final worker must receive or read all original user fragments before any write or successful completion, including already-stored, nothing-to-store and read-only receipts.
+  Candidates are not independent verification; proposals are not user decisions. Read key tool evidence as needed.
+- Segmented final input is bounded to 128,000 characters; the overall timeout remains 280 seconds. Limits, cancellation and unread user evidence fail explicitly without replaying uncertain writes.
+  Cancellation reaches in-flight rsrs commands but cannot undo writes already accepted by the engine; inspect the library first.
+- `archive.progress/context` records stages, counts and preview coverage, never transcript text. `records` lists known writes; `checkedRecords` lists IDs verified by a successful receipt.
+  Partial preview coverage does not prevent reading original middles. Known IDs after failure do not prove successful archival.
+- Segmentation adds model calls and latency. Non-text attachments are marked omitted and never inferred.
+
+Thanks to [aaaaaadi/respire-codex's repair](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1); this release incorporates it with original-evidence retention and completion checks.
 
 ## Configuration, state, and privacy
 
