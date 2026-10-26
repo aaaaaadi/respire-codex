@@ -140,3 +140,20 @@ test('packaged command runs through the real platform shell with spaces in PLUGI
   await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(Error(`exit ${code}`))) })
   assert.equal(stdout.trim(), '')
 })
+
+test('successful zero-match recall still archives once, paused and errors do not', async t => {
+  for (const [name, response, expected] of [
+    ['empty', { status: 'skip', summary: { count: 0 } }, 1],
+    ['paused', { status: 'skip', summary: { reason: 'paused' } }, 0],
+    ['error', { status: 'error', errors: ['unavailable'] }, 0],
+  ]) {
+    const options = await fixture(t, async () => response)
+    let archives = 0
+    options.archive = async () => { archives++; return { result: 'nothing-to-store', records: [], calls: 2 } }
+    const event = { ...base, turn_id: name }
+    await handleHook(event, options)
+    await handleHook({ ...event, hook_event_name: 'Stop' }, options)
+    await handleHook({ ...event, hook_event_name: 'Stop' }, options)
+    assert.equal(archives, expected, name)
+  }
+})

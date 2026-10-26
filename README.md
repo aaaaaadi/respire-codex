@@ -221,7 +221,7 @@ are valid outcomes. It does not import an entire conversation as a memory.
 Destructive merges, forced writes, credentials, engine lifecycle and configuration
 changes are excluded from its tool; complex maintenance needs a reviewed task.
 
-The worker has one restricted rsrs tool. Plugins, hooks, shell execution,
+The final worker has one restricted rsrs tool and, for segmented turns, a read-only current-turn evidence tool. Extraction workers have no tools. Plugins, hooks, shell execution,
 external MCP and web search are disabled; its workspace sandbox is read-only.
 It uses app-server turn data, not transcript-file parsing. The ephemeral task is
 not added to chat history. Normal Stop emits no output and never returns
@@ -237,6 +237,15 @@ raw error messages and data are not copied into persistent state. Failure never
 claims storage succeeded. Check the library before retrying an unconfirmed
 write. Codex cancels unfinished background hooks when the parent session ends;
 keep it open until the worker completes.
+
+### Local repair: bounded current-turn archival
+This branch's local prerelease is 0.2.3-local.1, not an official release. It processes only the triggering turn.
+A successful zero-hit recall (skip/count=0) remains eligible; paused/error responses do not.
+Dialogue text is preserved. Tool evidence is bounded to approximately 6,000 head/tail characters with explicit PARTIAL markers; omitted attachments are never inferred.
+Up to 64,000 prepared characters use one archive worker. Larger turns are split into at most twelve 48,000-character chunks, each extracted by a tool-free worker into at most 6,000 characters of source-linked candidates.
+Only after every extraction succeeds does one final worker reconcile and write. A read-only current-turn evidence tool exposes original fragments; all non-inline user fragments must be read before writes.
+The final candidate input is bounded to 128,000 characters and the overall timeout remains 280 seconds. Segment/candidate limits and cancellation fail explicitly, without replaying uncertain writes.
+State records coverage and extraction progress, never transcript text. records lists known writes, while checkedRecords lists successful receipt readbacks. More chunks cost more model calls; shell-driven verification does not establish natural desktop hook acceptance.
 
 ## Configuration, state, and privacy
 

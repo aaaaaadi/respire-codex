@@ -138,13 +138,13 @@ test('missing and oversized target turns fail before any memory write', async ()
         async request(method, params) {
           if (method === 'config/read') return { config: {} }
           if (method === 'thread/read') { assert.equal(params.includeTurns, false); return { thread: {} } }
-          if (method === 'thread/turns/list') return { data: oversized ? [{ id: 'target', items: params.itemsView === 'full' ? [{ type: 'agentMessage', text: 'x'.repeat(256001) }] : [] }] : [], nextCursor: null }
+          if (method === 'thread/turns/list') return { data: oversized ? [{ id: 'target', items: params.itemsView === 'full' ? [{ type: 'agentMessage', text: 'x'.repeat(700000) }] : [] }] : [], nextCursor: null }
           assert.notEqual(method, 'thread/start')
           return {}
         },
       }),
     })
-    await assert.rejects(result, oversized ? /archive-context-limit/ : /turn-not-readable/)
+    await assert.rejects(result, oversized ? /archive-segment-limit/ : /turn-not-readable/)
   }
 })
 
@@ -195,4 +195,200 @@ test('Codex JSON transport handles a real subprocess, Unicode and cancellation',
   abort.abort()
   await assert.rejects(client.request('echo', value), /cancelled/)
   await client.exited
+})
+
+function segmentedFixture(items, { failExtraction = false, abortDuringExtraction = false } = {}) {
+  let options, activeSettings
+  const settings = [], inputs = [], stages = [], memoryCalls = []
+  const controller = new AbortController()
+  const finish = text => {
+    options.onNotification({method:'item/completed',params:{item:{type:'agentMessage',text}}})
+    options.onNotification({method:'turn/completed',params:{turn:{status:'completed'}}})
+  }
+  return {
+    settings, inputs, stages, memoryCalls,
+    run: () => archiveTurn({session_id:'parent',turn_id:'target',cwd:process.cwd()},{
+      signal:controller.signal,
+      onProgress: async value => stages.push(value),
+      call:async args => { memoryCalls.push(args[0]); return {status:'ok',summary:{id}} },
+      connect: value => {
+        options=value
+        return { notify(){},close(){},exited:new Promise(()=>{}), async request(method,params){
+          if(method==='config/read') return {config:{}}
+          if(method==='thread/read') return {thread:{}}
+          if(method==='thread/turns/list') return {data:[{id:'target',items:params.itemsView==='full'?items:[]}],nextCursor:null}
+          if(method==='thread/start'){activeSettings=params;settings.push(params);return {thread:{id:'worker-'+settings.length}}}
+          if(method==='turn/start'){
+            inputs.push(params.input[0].text)
+            if(activeSettings.dynamicTools.length===0){
+              if(abortDuringExtraction){controller.abort();return {}}
+              if(failExtraction){finish('not valid JSON');return {}}
+              finish(JSON.stringify({facts:[],constraints:[]}))
+            }else{
+              for(const command of ['recall','prompt','show']){
+                const result=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
+                assert.equal(result.success,true)
+              }
+              finish(JSON.stringify({result:'already-stored',ids:[id]}))
+            }
+          }
+          return {}
+        }}
+      }
+    })
+  }
+}
+
+test('oversized dialogue is extracted without memory access then archived once', async () => {
+  const items=[{type:'userMessage',content:[{type:'text',text:'No deployment'}]},{type:'agentMessage',text:'discussion '.repeat(27000)}]
+  const fixture=segmentedFixture(items)
+  const result=await fixture.run()
+  assert.ok(fixture.settings.length>2)
+  assert.ok(fixture.settings.slice(0,-1).every(x=>x.dynamicTools.length===0))
+  assert.equal(fixture.settings.at(-1).dynamicTools[0].name,'respire_memory')
+  assert.deepEqual(fixture.memoryCalls,['recall','prompt','show'])
+  assert.equal(result.result,'already-stored')
+  assert.ok(result.context.chunks>1)
+  assert.equal(result.context.extractedChunks,result.context.chunks)
+  assert.ok(fixture.inputs.every(x=>x.length<128000))
+})
+
+test('failed or cancelled extraction never exposes memory writes', async () => {
+  const items=[{type:'agentMessage',text:'discussion '.repeat(27000)}]
+  for(const mode of [{failExtraction:true},{abortDuringExtraction:true}]){
+    const fixture=segmentedFixture(items,mode)
+    await assert.rejects(fixture.run(),/invalid-extraction|cancelled/)
+    assert.equal(fixture.memoryCalls.length,0)
+    assert.ok(fixture.settings.every(x=>x.dynamicTools.length===0))
+  }
+})
+
+test('Stop persists bounded progress and known IDs after a failed extraction or archival', async t => {
+  const dataDir=await mkdtemp(join(tmpdir(),'respire progress '))
+  t.after(()=>rm(dataDir,{recursive:true,force:true}))
+  const event={session_id:'progress',turn_id:'one',cwd:process.cwd(),prompt:'project',hook_event_name:'UserPromptSubmit'}
+  const progress={stage:'extracting',chunks:3,extractedChunks:1,coverage:'partial'}
+  const options={dataDir,call:async()=>({status:'ok',details:[]}),archive:async(event,{onProgress})=>{
+    await onProgress(progress)
+    const state=JSON.parse(await readFile(join(dataDir,'sessions',keyOf('progress')+'.json'),'utf8'))
+    assert.deepEqual(state.turns[keyOf('one')].archive.progress,progress)
+    throw Object.assign(new Error('invalid-extraction'),{archiveProgress:progress,archiveRecords:[id]})
+  }}
+  await handleHook(event,options)
+  await handleHook({...event,hook_event_name:'Stop'},options)
+  const state=JSON.parse(await readFile(join(dataDir,'sessions',keyOf('progress')+'.json'),'utf8'))
+  assert.equal(state.turns[keyOf('one')].archive.status,'unconfirmed')
+  assert.deepEqual(state.turns[keyOf('one')].archive.progress,progress)
+  assert.deepEqual(state.turns[keyOf('one')].archive.records,[id])
+})
+
+test('segmented archival requires original long user evidence before writing', async () => {
+  const items=[{type:'userMessage',content:[{type:'text',text:'Do not deploy. '.repeat(8000)}]},{type:'agentMessage',text:'Proposal only.'}]
+  let settings, finalPayload, realWrites=0
+  const result=await archiveTurn({session_id:'p',turn_id:'t',cwd:process.cwd()},{
+    call:async args=>{if(args[0]==='update')realWrites++;return {status:'ok',summary:{id}}},
+    connect:options=>({
+      notify(){},close(){},exited:new Promise(()=>{}),
+      async request(method,params){
+        if(method==='config/read')return {config:{}}
+        if(method==='thread/read')return {thread:{}}
+        if(method==='thread/turns/list')return {data:[{id:'t',items:params.itemsView==='full'?items:[]}],nextCursor:null}
+        if(method==='thread/start'){settings=params;return {thread:{id:'w'}}}
+        if(method==='turn/start'){
+          let final
+          if(settings.dynamicTools.length===0)final=JSON.stringify({facts:[],constraints:[]})
+          else{
+            finalPayload=JSON.parse(params.input[0].text.split('\n').slice(1).join('\n'))
+            for(const command of ['recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
+            const blocked=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:update}})
+            assert.equal(blocked.success,false)
+            assert.match(blocked.contentItems[0].text,/read-user-evidence-before-write/)
+            for(const source of finalPayload.unreadUserSources){
+              const evidence=await options.onRequest({method:'item/tool/call',params:{tool:'respire_turn_evidence',arguments:{sources:[source]}}})
+              assert.equal(evidence.success,true)
+            }
+            const written=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:update}})
+            assert.equal(written.success,true)
+            await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read('show')}})
+            final=JSON.stringify({result:'stored',ids:[id]})
+          }
+          options.onNotification({method:'item/completed',params:{item:{type:'agentMessage',text:final}}})
+          options.onNotification({method:'turn/completed',params:{turn:{status:'completed'}}})
+        }
+        return {}
+      }
+    })
+  })
+  assert.equal(realWrites,1)
+  assert.ok(finalPayload.unreadUserSources.length>0)
+  assert.equal(result.result,'stored')
+})
+
+test('archive cancellation reaches an in-flight memory command', async () => {
+  const controller=new AbortController()
+  let receivedSignal
+  let stopped=false
+  const call=async (args, options)=>{
+    if(args[0]!=='update')return {status:'ok',summary:{id}}
+    receivedSignal=options?.signal
+    controller.abort()
+    if(!receivedSignal)throw new Error('missing-call-signal')
+    if(receivedSignal.aborted){stopped=true;throw new Error('cancelled')}
+    throw new Error('signal-not-aborted')
+  }
+  const work=archiveTurn({session_id:'p',turn_id:'t',cwd:process.cwd()},{
+    signal:controller.signal,call,
+    connect:options=>({notify(){},close(){},exited:new Promise(()=>{}),async request(method,params){
+      if(method==='config/read')return {config:{}}
+      if(method==='thread/read')return {thread:{}}
+      if(method==='thread/turns/list')return {data:[{id:'t',items:params.itemsView==='full'?[{type:'agentMessage',text:'confirmed fact'}]:[]}],nextCursor:null}
+      if(method==='thread/start')return {thread:{id:'w'}}
+      if(method==='turn/start'){
+        for(const command of ['recall','prompt','show'])await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
+        await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:update}})
+      }
+      return {}
+    }})
+  })
+  await assert.rejects(work,/cancelled/)
+  assert.ok(receivedSignal)
+  assert.equal(stopped,true)
+})
+
+test('late extraction notifications cannot complete the next extraction before it starts', async () => {
+  const controller=new AbortController()
+  let workers=0, settings, finalWorkerStarted=false
+  const items=[{type:'agentMessage',text:'discussion '.repeat(27000)}]
+  const work=archiveTurn({session_id:'p',turn_id:'t',cwd:process.cwd()},{
+    signal:controller.signal,call:async()=>{assert.fail('must not access memory')},
+    connect:options=>({notify(){},close(){},exited:new Promise(()=>{}),async request(method,params){
+      if(method==='config/read')return {config:{}}
+      if(method==='thread/read')return {thread:{}}
+      if(method==='thread/turns/list')return {data:[{id:'t',items:params.itemsView==='full'?items:[]}],nextCursor:null}
+      if(method==='thread/start'){
+        settings=params;workers++
+        if(workers===2){
+          options.onNotification({method:'item/completed',params:{threadId:'w1',item:{type:'agentMessage',text:JSON.stringify({facts:[],constraints:[]})}}})
+          options.onNotification({method:'turn/completed',params:{threadId:'w1',turn:{status:'completed'}}})
+        }
+        return {thread:{id:'w'+workers}}
+      }
+      if(method==='turn/start'){
+        if(settings.dynamicTools.length){finalWorkerStarted=true;controller.abort();return {}}
+        if(workers===1){
+          options.onNotification({method:'item/completed',params:{threadId:'w1',item:{type:'agentMessage',text:JSON.stringify({facts:[],constraints:[]})}}})
+          options.onNotification({method:'turn/completed',params:{threadId:'w1',turn:{status:'completed'}}})
+        }else if(workers===2){
+          setTimeout(()=>controller.abort(),30)
+        }else{
+          // A later worker means the incomplete second extraction was incorrectly accepted.
+          finalWorkerStarted=true;controller.abort()
+        }
+      }
+      return {}
+    }})
+  })
+  await assert.rejects(work,/cancelled/)
+  assert.equal(workers,2)
+  assert.equal(finalWorkerStarted,false)
 })
