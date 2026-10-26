@@ -42,8 +42,8 @@ Codex 原生记忆插件：用户发言时召回、显式请求时存储、Stop 
 需要 Node.js **24+**、npm、Git、支持 plugins/hooks 的本地 Codex，以及已安装的 `rsrs`。
 Windows 使用 npm/pnpm 的 rsrs 命令包装器时还需 **PowerShell 7.3+**（`pwsh`），
 以保留双引号等参数；或设置 `RESPIRE_RSRS_PATH` 指向真实的 `rsrs.exe`，直接执行原生程序。
-开发时核对的 Codex CLI 为 **0.163.0**。桌面端需要支持相同的插件和 hooks 接口；
-Work Cloud、网页端、其他版本和企业禁用 hooks 的环境不在本版验证范围。
+已通过 Codex CLI **0.163.0** 和桌面内置运行时 **0.164.0-alpha.11.1** 的原生 hooks 验收。
+独立 GUI 画面、Work Cloud、网页端、其他版本和企业禁用 hooks 的环境不在本版验证范围。
 
 插件使用 `.codex-plugin/plugin.json` 兼容 Codex 0.163.0。该版本会跳过根目录
 Agent Plugins `plugin.json` 格式的 hooks，即使插件已经启用。不要同时添加根清单。

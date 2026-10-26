@@ -50,9 +50,9 @@ Requires Node.js **24+**, npm, Git, a local Codex client with plugins/hooks supp
 and an installed `rsrs` CLI. On Windows, npm/pnpm rsrs wrappers also require
 **PowerShell 7.3+** (`pwsh`) to preserve arguments such as double quotes.
 Alternatively, set `RESPIRE_RSRS_PATH` to a native `rsrs.exe` for direct execution.
-Development was checked against Codex CLI **0.163.0**. Desktop clients need the
-same plugin and hooks interfaces. Work Cloud, web clients, other versions, and
-enterprise environments with hooks disabled have not been validated.
+Native hook checks cover Codex CLI **0.163.0** and the desktop runtime
+**0.164.0-alpha.11.1**. Separate GUI rendering, Work Cloud, web clients, other versions,
+and enterprise environments with hooks disabled have not been validated.
 
 This package uses `.codex-plugin/plugin.json` for Codex 0.163.0 compatibility.
 That version skips hooks from root Agent Plugins `plugin.json` manifests, even
