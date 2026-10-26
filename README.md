@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -255,6 +255,28 @@ keep it open until the worker completes.
 - Segmentation adds model calls and latency. Non-text attachments are marked omitted and never inferred.
 
 Thanks to [aaaaaadi/respire-codex's repair](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1); this release incorporates it with original-evidence retention and completion checks.
+
+### Optional short status hints (0.2.4)
+
+The default remains quiet: no extra `Memory:`, `Used:` or save labels are requested. To observe memory use, set `RESPIRE_MEMORY_STATUS=1` in the environment that launches Codex. PowerShell example:
+
+```powershell
+$env:RESPIRE_MEMORY_STATUS = '1'
+codex
+```
+
+Remove the setting and start a new chat to disable it; restore the previous value if one existed. Desktop clients must inherit the variable at launch. The plugin does not change system environment settings.
+
+- `Memory: N found` counts only safe candidates actually injected; candidates do not prove adoption.
+- `Used: short-ID` is the model's statement after reading a record and judging it useful, not independent plugin measurement. Titles can be expanded when requested.
+- A write receipt alone is `unverified`; every known write must have an actual readback for `verified`. Omit save labels when no prior receipt exists.
+- Late completion can be reported as `Earlier save`. Each unchanged outcome is injected at most once; this does not acknowledge that the model displayed it or the user saw it.
+- Instructions suppress all labels for strict JSON, fixed formats or exact-output requests. Status reporting does not add a Stop continuation.
+- Hints reserve hook context space: the title budget is 1,200 characters when enabled and remains 1,500 by default.
+
+Version 0.2.4 retains 0.2.3's original-evidence protections and storage workflow. `archive-timeout` identifies the worker's own deadline; `cancelled` identifies parent cancellation. Failed model turns preserve only status, category and an available HTTP code in `archive.failure`; the full upstream cause stays in process memory. A disconnected response stream is not storage confirmation. Inspect memory before retrying any unconfirmed outcome.
+
+Integrated from [PR #1](https://github.com/risense-ai/respire-codex/pull/1), with quiet defaults preserved.
 
 ## Configuration, state, and privacy
 

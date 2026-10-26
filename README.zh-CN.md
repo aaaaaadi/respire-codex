@@ -81,7 +81,7 @@ codex plugin add respire@rsrsai
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.3",
+    "version": "0.2.4",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -214,6 +214,28 @@ Remove-Item Env:npm_config_prefer_online
 - 分段增加模型调用和耗时。非文字附件只保留省略标记，不推断附件内容。
 
 感谢 [aaaaaadi/respire-codex 的修复](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1)，本版吸纳并补充了证据保留及成功出口校验。
+
+### 可选的短状态提示（0.2.4）
+
+默认保持静默，不要求模型额外输出 `Memory:`、`Used:` 或保存标签。若需要观察记忆使用情况，在启动 Codex 的环境中设置 `RESPIRE_MEMORY_STATUS=1`。PowerShell 示例：
+
+```powershell
+$env:RESPIRE_MEMORY_STATUS = '1'
+codex
+```
+
+不再需要时移除该设置并新建会话；若变量原本已有值，应恢复原值。桌面客户端须从继承此变量的环境启动；插件不修改系统环境。
+
+- `Memory: N found` 只统计实际注入的安全候选；有候选不等于已采用。
+- `Used: 短ID` 是模型在读取正文并认为用于回答后给出的说明，不是插件独立测量的采用证明；用户询问依据时可展开标题。
+- 仅有写入回执显示 `unverified`；全部已知写入都实际回读后才显示 `verified`。无上轮回执时省略标签。
+- 后台迟到结果可在后续回合用 `Earlier save` 补报。相同结果最多注入一次；不保证模型已显示或用户已看到。
+- 用户要求严格 JSON、固定格式或只输出指定内容时，提示要求省略所有标签。不会为报告状态增加 Stop 续跑。
+- 开启提示时为状态预留 hook 上下文空间，标题预算为 1,200 字符；默认静默仍为 1,500。
+
+0.2.4 保留 0.2.3 的大回合原文保护与存储流程。`archive-timeout` 表示后台自身时限到达，`cancelled` 表示父会话取消；模型任务失败的 `archive.failure` 只保留状态、错误类别和可用的 HTTP 状态码，完整上游原因仅留在进程内 `cause`。响应流断连不等于存储成功，未确认结果仍须先查库，不自动重试。
+
+此功能整合自 [PR #1](https://github.com/risense-ai/respire-codex/pull/1)，默认行为按静默要求调整。
 
 ## 配置、状态与隐私
 
