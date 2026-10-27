@@ -392,3 +392,18 @@ test('late extraction notifications cannot complete the next extraction before i
   assert.equal(workers,2)
   assert.equal(finalWorkerStarted,false)
 })
+
+test('diary reads are bounded and never count as verified main-memory evidence', async () => {
+  let args;
+  const memory = memoryTools(async input => { args=input; return {status:'ok', details:{items:[{source_id:id,text:'建议切换认证方式',evidence_state:'reference'}]}} });
+  const doc = await memory.run({command:'diary-search', args:['认证']});
+  assert.deepEqual(args, ['diary-search','认证','--limit','5','--max-chars','4000','--mode','lexical']);
+  assert.equal(doc.details.items[0].evidence_state, 'reference');
+  await assert.rejects(memory.run(update), /read-before-write/);
+  await assert.rejects(memory.run({command:'diary-search',args:['认证','--max-chars','999999']}), /bounded-diary/);
+  await assert.rejects(memory.run({command:'diary-fragment',args:[id,'part','--neighbors','99']}), /bounded-diary/);
+});
+test('unexpected oversized diary responses fail closed instead of flooding model context', async () => {
+  const memory = memoryTools(async () => ({status:'ok',details:{items:[{text:'x'.repeat(9000)}]}}));
+  await assert.rejects(memory.run({command:'diary-search',args:['query']}), /diary-output-too-large/);
+});

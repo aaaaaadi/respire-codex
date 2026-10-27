@@ -95,3 +95,14 @@ test('Chinese outcomes from the previous version are not replayed after translat
   })
   assert.doesNotMatch(text(await handleHook(base, options)), /Last save:|Earlier save:/)
 })
+
+test('visible adoption requires per-record basis/reference/history labels without promoting recall or save receipts', async t => {
+  const output = text(await handleHook(base, await setup(t)));
+  assert.match(output, /\[basis\]/);
+  assert.match(output, /\[ref\]/);
+  assert.match(output, /\[history\]/);
+  assert.match(output, /逐条/);
+  assert.match(output, /保存.*不.*可信/);
+  assert.match(output, /成功读取正文/);
+  assert.match(output, /Memory: unused/);
+});
