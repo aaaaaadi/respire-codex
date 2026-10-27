@@ -13,8 +13,33 @@ const text = output => output.hookSpecificOutput?.additionalContext ?? ''
 async function setup(t, response = { status: 'ok', details: [hit] }) {
   const dataDir = await mkdtemp(join(tmpdir(), 'respire-visibility-'))
   t.after(() => rm(dataDir, { recursive: true, force: true }))
-  return { dataDir, call: async () => response }
+  return { dataDir, call: async () => response, showStatus: true }
 }
+
+test('status remains silent when disabled and does not consume previous notices', async t => {
+  const options = { ...await setup(t), showStatus: false }
+  await withState(options.dataDir, base.session_id, async (state, save) => {
+    state.turns.old = { archive: { status: 'completed', result: 'stored', records: [id], checkedRecords: [id] } }
+    await save(state)
+  })
+  const output = text(await handleHook(base, options))
+  assert.match(output, /自动召回/)
+  assert.doesNotMatch(output, /可见提示|Memory:|Used:|save:/)
+  await withState(options.dataDir, base.session_id, async state => {
+    assert.equal(state.visibilityInitialized, undefined)
+    assert.equal(state.turns.old.noticeOutcome, undefined)
+  })
+})
+
+test('optional hints defer to strict output formats and empty writes stay skipped', async t => {
+  const options = await setup(t)
+  const output = text(await handleHook({ ...base, prompt: '只输出JSON' }, options))
+  assert.match(output, /严格JSON/)
+  assert.match(output, /省略所有状态标签/)
+  const empty = text(await handleHook({ ...base, turn_id: 'empty-write', prompt: '记住：' }, options))
+  assert.match(empty, /Save: skipped/)
+  assert.doesNotMatch(empty, /Save: verified/)
+})
 test('visible recall counts only safe delivered candidates and distinguishes empty from unavailable', async t => {
   for (const [response, expected] of [
     [{ status: 'ok', details: [hit, { ...hit, title: 'password=hidden' }] }, /Memory: 1 found/],

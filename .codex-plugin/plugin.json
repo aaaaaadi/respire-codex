@@ -1,26 +1,19 @@
 {
   "name": "respire",
-  "version": "0.2.3-local.5",
+  "version": "0.2.4",
   "description": "Persistent local memory for Codex, powered by rsrs",
-  "author": {
-    "name": "risense-ai"
-  },
+  "author": { "name": "risense-ai" },
   "repository": "https://github.com/risense-ai/respire-codex",
   "license": "MIT",
   "skills": "./skills/",
   "hooks": "./hooks/hooks.json",
   "extensions": {
-    "com.openai": {
-      "onboardingSkill": "./skills/setup/SKILL.md"
-    }
+    "com.openai": { "onboardingSkill": "./skills/setup/SKILL.md" }
   },
   "interface": {
     "displayName": "Respire",
     "shortDescription": "Recall and save local memories with rsrs",
     "category": "Productivity",
-    "capabilities": [
-      "Read",
-      "Write"
-    ]
+    "capabilities": ["Read", "Write"]
   }
 }

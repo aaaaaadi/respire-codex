@@ -17,6 +17,41 @@ async function prime(memory) {
   for (const command of ['recall', 'prompt', 'show']) await memory.run(read(command))
 }
 
+test('worker failures preserve the original cause and only safe diagnostic fields', async () => {
+  const failure = { message: 'token=private-upstream-text', codexErrorInfo: { httpConnectionFailed: { httpStatusCode: 502 } } }
+  const work = archiveTurn({ session_id: 'p', turn_id: 't', cwd: process.cwd() }, {
+    call: async () => assert.fail('failed worker must not access memory'),
+    connect: options => ({
+      notify() {}, close() {}, exited: new Promise(() => {}),
+      async request(method, params) {
+        if (method === 'config/read') return { config: {} }
+        if (method === 'thread/read') return { thread: {} }
+        if (method === 'thread/turns/list') return { data: [{ id: 't', items: params.itemsView === 'full' ? [{ type: 'agentMessage', text: 'proposal' }] : [] }], nextCursor: null }
+        if (method === 'thread/start') return { thread: { id: 'worker' } }
+        if (method === 'turn/start') options.onNotification({ method: 'turn/completed', params: { turn: { status: 'failed', error: failure } } })
+        return {}
+      },
+    }),
+  })
+  await assert.rejects(work, error => {
+    assert.equal(error.message, 'archive-incomplete')
+    assert.equal(error.cause, failure)
+    assert.deepEqual(error.archiveFailure, { status: 'failed', type: 'httpConnectionFailed', httpStatus: 502 })
+    assert.ok(!JSON.stringify(error.archiveFailure).includes('private-upstream-text'))
+    return true
+  })
+})
+
+test('the internal deadline is distinct from cancellation by the parent', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] })
+  const work = archiveTurn({ session_id: 'p', turn_id: 't', cwd: process.cwd() }, {
+    call: async () => assert.fail('expired worker must not access memory'),
+    connect: () => ({ notify() {}, close() {}, exited: new Promise(() => {}), request: () => new Promise(() => {}) }),
+  })
+  t.mock.timers.tick(280000)
+  await assert.rejects(work, /archive-timeout/)
+})
+
 test('archive tools require policy, candidates, real write receipts and readback', async () => {
   const calls = []
   let wrongShow = true
@@ -36,6 +71,7 @@ test('archive tools require policy, candidates, real write receipts and readback
   wrongShow = false
   await memory.run({ command: 'show', args: [next] })
   assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [id, next] })).records, [id, next])
+  assert.deepEqual(memory.finish(JSON.stringify({ result: 'stored', ids: [] })).checkedRecords, [id, next])
 })
 
 test('archive tools reject destructive operations, secrets, plan writes and unconfirmed retries', async () => {
@@ -197,7 +233,7 @@ test('Codex JSON transport handles a real subprocess, Unicode and cancellation',
   await client.exited
 })
 
-function segmentedFixture(items, { failExtraction = false, abortDuringExtraction = false } = {}) {
+function segmentedFixture(items, { failExtraction = false, abortDuringExtraction = false, readUsers = false, receiptResult = 'already-stored' } = {}) {
   let options, activeSettings
   const settings = [], inputs = [], stages = [], memoryCalls = []
   const controller = new AbortController()
@@ -225,11 +261,18 @@ function segmentedFixture(items, { failExtraction = false, abortDuringExtraction
               if(failExtraction){finish('not valid JSON');return {}}
               finish(JSON.stringify({facts:[],constraints:[]}))
             }else{
+              if(readUsers){
+                const payload=JSON.parse(params.input[0].text.split('\n').slice(1).join('\n'))
+                for(const source of payload.unreadUserSources || []){
+                  const response=await options.onRequest({method:'item/tool/call',params:{tool:'respire_turn_evidence',arguments:{sources:[source]}}})
+                  assert.equal(response.success,true)
+                }
+              }
               for(const command of ['recall','prompt','show']){
                 const result=await options.onRequest({method:'item/tool/call',params:{tool:'respire_memory',arguments:read(command)}})
                 assert.equal(result.success,true)
               }
-              finish(JSON.stringify({result:'already-stored',ids:[id]}))
+              finish(JSON.stringify({result:receiptResult,ids:receiptResult === 'already-stored' ? [id] : []}))
             }
           }
           return {}
@@ -238,6 +281,17 @@ function segmentedFixture(items, { failExtraction = false, abortDuringExtraction
     })
   }
 }
+
+test('segmented archival cannot finish without reviewing original user evidence', async () => {
+  const items = [{ type: 'userMessage', content: [{ type: 'text', text: 'User authorization boundary. '.repeat(11000) }] }, { type: 'agentMessage', text: 'Acknowledged.' }]
+  for (const receiptResult of ['already-stored', 'nothing-to-store']) {
+    const unread = segmentedFixture(items, { receiptResult })
+    await assert.rejects(unread.run(), /archive-user-evidence-unread/)
+    assert.ok(unread.memoryCalls.every(command => !['remember', 'update'].includes(command)))
+    const reviewed = segmentedFixture(items, { readUsers: true, receiptResult })
+    assert.equal((await reviewed.run()).result, receiptResult)
+  }
+})
 
 test('oversized dialogue is extracted without memory access then archived once', async () => {
   const items=[{type:'userMessage',content:[{type:'text',text:'No deployment'}]},{type:'agentMessage',text:'discussion '.repeat(27000)}]
@@ -268,11 +322,12 @@ test('Stop persists bounded progress and known IDs after a failed extraction or 
   t.after(()=>rm(dataDir,{recursive:true,force:true}))
   const event={session_id:'progress',turn_id:'one',cwd:process.cwd(),prompt:'project',hook_event_name:'UserPromptSubmit'}
   const progress={stage:'extracting',chunks:3,extractedChunks:1,coverage:'partial'}
+  const failure={status:'failed',type:'httpConnectionFailed',httpStatus:502}
   const options={dataDir,call:async()=>({status:'ok',details:[]}),archive:async(event,{onProgress})=>{
     await onProgress(progress)
     const state=JSON.parse(await readFile(join(dataDir,'sessions',keyOf('progress')+'.json'),'utf8'))
     assert.deepEqual(state.turns[keyOf('one')].archive.progress,progress)
-    throw Object.assign(new Error('invalid-extraction'),{archiveProgress:progress,archiveRecords:[id]})
+    throw Object.assign(new Error('invalid-extraction'),{archiveProgress:progress,archiveRecords:[id],archiveFailure:failure,cause:{message:'token=private-upstream-text'}})
   }}
   await handleHook(event,options)
   await handleHook({...event,hook_event_name:'Stop'},options)
@@ -280,10 +335,12 @@ test('Stop persists bounded progress and known IDs after a failed extraction or 
   assert.equal(state.turns[keyOf('one')].archive.status,'unconfirmed')
   assert.deepEqual(state.turns[keyOf('one')].archive.progress,progress)
   assert.deepEqual(state.turns[keyOf('one')].archive.records,[id])
+  assert.deepEqual(state.turns[keyOf('one')].archive.failure,failure)
+  assert.ok(!JSON.stringify(state).includes('private-upstream-text'))
 })
 
 test('segmented archival requires original long user evidence before writing', async () => {
-  const items=[{type:'userMessage',content:[{type:'text',text:'Do not deploy. '.repeat(8000)}]},{type:'agentMessage',text:'Proposal only.'}]
+  const items=[{type:'userMessage',content:[{type:'text',text:'Do not deploy. '.repeat(20000)}]},{type:'agentMessage',text:'Proposal only.'}]
   let settings, finalPayload, realWrites=0
   const result=await archiveTurn({session_id:'p',turn_id:'t',cwd:process.cwd()},{
     call:async args=>{if(args[0]==='update')realWrites++;return {status:'ok',summary:{id}}},

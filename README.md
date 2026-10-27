@@ -50,9 +50,9 @@ Requires Node.js **24+**, npm, Git, a local Codex client with plugins/hooks supp
 and an installed `rsrs` CLI. On Windows, npm/pnpm rsrs wrappers also require
 **PowerShell 7.3+** (`pwsh`) to preserve arguments such as double quotes.
 Alternatively, set `RESPIRE_RSRS_PATH` to a native `rsrs.exe` for direct execution.
-Development was checked against Codex CLI **0.163.0**. Desktop clients need the
-same plugin and hooks interfaces. Work Cloud, web clients, other versions, and
-enterprise environments with hooks disabled have not been validated.
+Native hook checks cover Codex CLI **0.163.0** and the desktop runtime
+**0.164.0-alpha.11.1**. Separate GUI rendering, Work Cloud, web clients, other versions,
+and enterprise environments with hooks disabled have not been validated.
 
 This package uses `.codex-plugin/plugin.json` for Codex 0.163.0 compatibility.
 That version skips hooks from root Agent Plugins `plugin.json` manifests, even
@@ -94,7 +94,7 @@ uses `latest`. To pin a version, use this entry in your own marketplace:
   "source": {
     "source": "npm",
     "package": "@rsrsai/codex",
-    "version": "0.2.2",
+    "version": "0.2.4",
     "registry": "https://registry.npmjs.org"
   },
   "policy": { "installation": "AVAILABLE", "authentication": "ON_INSTALL" },
@@ -221,7 +221,7 @@ are valid outcomes. It does not import an entire conversation as a memory.
 Destructive merges, forced writes, credentials, engine lifecycle and configuration
 changes are excluded from its tool; complex maintenance needs a reviewed task.
 
-The final worker has one restricted rsrs tool and, for segmented turns, a read-only current-turn evidence tool. Extraction workers have no tools. Plugins, hooks, shell execution,
+The final worker has a restricted rsrs tool and, after compaction or segmentation, a read-only current-turn evidence tool. Extraction workers have no tools. Plugins, hooks, shell execution,
 external MCP and web search are disabled; its workspace sandbox is read-only.
 It uses app-server turn data, not transcript-file parsing. The ephemeral task is
 not added to chat history. Normal Stop emits no output and never returns
@@ -238,14 +238,45 @@ claims storage succeeded. Check the library before retrying an unconfirmed
 write. Codex cancels unfinished background hooks when the parent session ends;
 keep it open until the worker completes.
 
-### Local repair: bounded current-turn archival
-This branch's local prerelease is 0.2.3-local.1, not an official release. It processes only the triggering turn.
-A successful zero-hit recall (skip/count=0) remains eligible; paused/error responses do not.
-Dialogue text is preserved. Tool evidence is bounded to approximately 6,000 head/tail characters with explicit PARTIAL markers; omitted attachments are never inferred.
-Up to 64,000 prepared characters use one archive worker. Larger turns are split into at most twelve 48,000-character chunks, each extracted by a tool-free worker into at most 6,000 characters of source-linked candidates.
-Only after every extraction succeeds does one final worker reconcile and write. A read-only current-turn evidence tool exposes original fragments; all non-inline user fragments must be read before writes.
-The final candidate input is bounded to 128,000 characters and the overall timeout remains 280 seconds. Segment/candidate limits and cancellation fail explicitly, without replaying uncertain writes.
-State records coverage and extraction progress, never transcript text. records lists known writes, while checkedRecords lists successful receipt readbacks. More chunks cost more model calls; shell-driven verification does not establish natural desktop hook acceptance.
+### Large turns and segmented archival (0.2.3)
+
+- Successful zero-hit recall (`skip/count=0`) still permits Stop; paused, error and unknown skip responses do not.
+- The existing 256,000-character direct budget remains. Ordinary turns retain their full text and tool evidence.
+- Only over-budget turns compact long tool previews to at most 6,000 head and 6,000 tail characters with explicit `PARTIAL` markers.
+  Original tool fragments remain in worker memory for bounded source-ID reads, including omitted middles; transcript text is not persisted.
+- User and assistant text is never clipped. If prepared evidence still exceeds the budget, up to twelve 48,000-character chunks are extracted by tool-free ephemeral workers.
+  Each returns at most 6,000 characters of source-linked candidates. All extractions must succeed before one final worker reconciles and writes.
+- The final worker must receive or read all original user fragments before any write or successful completion, including already-stored, nothing-to-store and read-only receipts.
+  Candidates are not independent verification; proposals are not user decisions. Read key tool evidence as needed.
+- Segmented final input is bounded to 128,000 characters; the overall timeout remains 280 seconds. Limits, cancellation and unread user evidence fail explicitly without replaying uncertain writes.
+  Cancellation reaches in-flight rsrs commands but cannot undo writes already accepted by the engine; inspect the library first.
+- `archive.progress/context` records stages, counts and preview coverage, never transcript text. `records` lists known writes; `checkedRecords` lists IDs verified by a successful receipt.
+  Partial preview coverage does not prevent reading original middles. Known IDs after failure do not prove successful archival.
+- Segmentation adds model calls and latency. Non-text attachments are marked omitted and never inferred.
+
+Thanks to [aaaaaadi/respire-codex's repair](https://github.com/aaaaaadi/respire-codex/commit/70f4d726c1c97160dd2e0f3afca4c9beb2bc21c1); this release incorporates it with original-evidence retention and completion checks.
+
+### Optional short status hints (0.2.4)
+
+The default remains quiet: no extra `Memory:`, `Used:` or save labels are requested. To observe memory use, set `RESPIRE_MEMORY_STATUS=1` in the environment that launches Codex. PowerShell example:
+
+```powershell
+$env:RESPIRE_MEMORY_STATUS = '1'
+codex
+```
+
+Remove the setting and start a new chat to disable it; restore the previous value if one existed. Desktop clients must inherit the variable at launch. The plugin does not change system environment settings.
+
+- `Memory: N found` counts only safe candidates actually injected; candidates do not prove adoption.
+- `Used: short-ID` is the model's statement after reading a record and judging it useful, not independent plugin measurement. Titles can be expanded when requested.
+- A write receipt alone is `unverified`; every known write must have an actual readback for `verified`. Omit save labels when no prior receipt exists.
+- Late completion can be reported as `Earlier save`. Each unchanged outcome is injected at most once; this does not acknowledge that the model displayed it or the user saw it.
+- Instructions suppress all labels for strict JSON, fixed formats or exact-output requests. Status reporting does not add a Stop continuation.
+- Hints reserve hook context space: the title budget is 1,200 characters when enabled and remains 1,500 by default.
+
+Version 0.2.4 retains 0.2.3's original-evidence protections and storage workflow. `archive-timeout` identifies the worker's own deadline; `cancelled` identifies parent cancellation. Failed model turns preserve only status, category and an available HTTP code in `archive.failure`; the full upstream cause stays in process memory. A disconnected response stream is not storage confirmation. Inspect memory before retrying any unconfirmed outcome.
+
+Integrated from [PR #1](https://github.com/risense-ai/respire-codex/pull/1), with quiet defaults preserved.
 
 ## Configuration, state, and privacy
 
@@ -322,11 +353,3 @@ directory; distribution uses a manually installed marketplace.
 
 Interface references: [OpenAI plugin packaging](https://developers.openai.com/plugins/build/plugins)
 and [Codex hooks](https://learn.chatgpt.com/docs/hooks).
-
-## 简短英文记忆提示（0.2.3-local.3）
-
-提示单独一行，例如 `Memory: 5 found · Last save: verified`。读取正文且实际用于回答后显示 `Used: a5959ee7`（格式示例）；使用真实 ID 前 8 位，多条用逗号分隔，遇歧义则延长。默认不显示标题或正文，用户询问依据时再展开。未采用显示 `Memory: unused`。
-
-没有上轮保存回执时省略保存标签。进行中、仅有写入回执、已回读确认、未确认、无新增、已有记录、只读分别显示 pending、unverified、verified、unconfirmed、not needed、already exists、read-only。较早回合的迟到结果使用 `Earlier save`，每个结果只提示一次；升级不会重播已提示的中文状态。
-
-这是钩子引导模型输出的普通短标签，不是 Codex 原生 MCP 卡片。实际采用仍需模型根据本次读取与使用情况判断；桌面自然显示应在新会话中验收。候选数量只计算实际传给模型的安全条目。保持原有回读校验和不确定写入禁止重试的规则。
