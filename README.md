@@ -203,8 +203,9 @@ their full bodies. Prefer update, authorized merge, attach, then a new record.
 For new important records, inspect `taxonomy --list` or `tree` and `show` a
 suitable parent before using its full ID with `--parent`. Without a justified
 parent, stay pending; never guess, force a root write, or downgrade importance.
-Read back actual writes with `show`. Only an unknown actual write outcome
-requires verification before retry; hook pending does not block the first write.
+Read back actual writes with `show`. If an actual write outcome is unknown, DO NOT retry automatically or claim
+success. Verify the store read-only; verification does not authorize an automatic
+retry. Hook pending does not block the first compliant write.
 Plan, read-only, pause and permission rules still apply.
 
 ### Quiet background memory checks

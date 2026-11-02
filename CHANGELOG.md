@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.17
+
+- Preserve mandatory candidate, parent and read-back requirements with explicit MUST/ONLY AFTER language.
+- Forbid automatic retries and success claims after unknown writes; read-only verification does not authorize a retry.
+
 ## 0.2.16
 
 - Delegate explicit prefix storage to the main assistant without an unchecked write.
