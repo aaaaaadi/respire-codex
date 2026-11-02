@@ -308,3 +308,11 @@ GitHub Actions 在 Windows、Linux、macOS 检查语法、执行测试并核验 
 
 接口依据：[OpenAI 插件打包](https://developers.openai.com/plugins/build/plugins)、
 [Codex hooks](https://learn.chatgpt.com/docs/hooks)。
+
+### 遗留锁恢复（本地修复）
+
+会话锁记录主机、进程 ID 和随机标识。只有同一主机明确返回进程不存在（ESRCH）时，才清理该锁；恢复前再次核对锁内容，并串行化同一代锁的清理。活进程、被复用的进程 ID、权限不足、空锁、损坏锁及其他主机的锁均保守保留，不依据锁的年龄强制清理。
+
+恢复仅处理锁文件，不更改会话状态、去重记录、processing 或 unconfirmed 状态，不自动重试记忆写入。旧版空锁无法确认持有人，仍需人工检查。若恢复进程自身在清理期间退出，留下的 `.recovery` 保护文件也需人工确认后处理。
+
+本机测试包沿用 `respire@rsrsai` 身份及数据目录，通过插件管理命令安装；需要重启 Codex 并审核钩子后验证桌面触发。回退时恢复官方 marketplace 并安装原版，保留会话数据；不要同时启用第二份记忆插件。
