@@ -40,7 +40,7 @@ test('explicit storage delegates curation without engine writes or a second back
   for (const [index, prefix] of ['记：', '存：', '记录：', '记住：', 'remember:'].entries()) {
     const event = { ...base, turn_id: `prefix-${index}`, prompt: `${prefix}项目使用TypeScript` }
     const text = textOf(await handleHook(event, options))
-    for (const phrase of ['Nothing was written', 'Read prompt and agent-config', 'show their full bodies', 'prefer update, then an authorized merge, then attach, then a new record', 'taxonomy --list or tree', 'no justified parent exists, remain pending', 'never execute the engineering task']) assert.ok(text.includes(phrase), phrase)
+    for (const phrase of ['Nothing was written', 'you MUST read prompt and agent-config', 'show their full bodies', 'Prefer update, then an authorized merge, then attach, then a new record', 'taxonomy --list or tree', 'permitted ONLY AFTER', 'DO NOT retry automatically or claim success', 'Verification does not authorize an automatic retry', 'After every actual write, you MUST read it back with show', 'no justified parent exists, you MUST remain pending', 'DO NOT execute the engineering task']) assert.ok(text.includes(phrase), phrase)
     assert.doesNotMatch(text, /Saved:|may have been written/)
     assert.match(textOf(await handleHook(event, options)), /Resolve the original storage request/)
     await handleHook({ ...event, hook_event_name: 'Stop' }, options)
@@ -55,9 +55,9 @@ test('pending handoff differs from an unknown actual write outcome', async t => 
   const options = await fixture(t, async () => assert.fail('a prefix does not send a write'))
   const text = textOf(await handleHook({ ...base, prompt: '存：项目约定' }, options))
   assert.match(text, /hook made no write request/)
-  assert.match(text, /Complete this storage request in this turn/)
+  assert.match(text, /MUST resolve this storage request in this turn/)
   const { RULES } = await import('../lib/memory.js')
-  assert.match(RULES, /hook pending does not prohibit the first policy-compliant write/)
+  assert.match(RULES, /Hook pending does not prohibit the first policy-compliant write/)
   assert.match(storeText({ status: 'ok' }).text, /unconfirmed/)
 })
 
@@ -78,7 +78,7 @@ test('sessions and concurrent duplicate prefix events stay pending without write
   const event = { ...base, prompt: 'remember: confirmed fact' }
   const results = await Promise.all([handleHook(event, options), handleHook(event, options)])
   for (const result of results) assert.match(textOf(result), /store pending/)
-  assert.match(textOf(await handleHook({ ...event, session_id: 'other' }, options)), /Complete this storage request/)
+  assert.match(textOf(await handleHook({ ...event, session_id: 'other' }, options)), /MUST resolve this storage request/)
 })
 
 test('Stop guards missing turn, active continuation, failed recall and duplicate text new turn', async t => {
@@ -122,7 +122,7 @@ test('title budgets, malformed envelopes and credential heuristics', () => {
   assert.equal(recallText({ status: 'ok', details: [{ ...hit, title: 'password=hidden' }] }), '')
   assert.ok(recallText({ status: 'ok', details: Array(10).fill(hit) }).length <= 1500)
   const superseded = recallText({ status: 'ok', details: [{ ...hit, superseded_by: hit.id }] })
-  assert.match(superseded, /superseded; read the replacing record first/)
+  assert.match(superseded, /superseded; MUST read the replacing record before using this record/)
   assert.doesNotMatch(superseded, /已被取代|先查新条/)
   assert.equal(storeText({ status: 'ok' }).stored, false)
 })
