@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.16
+
+- Delegate explicit prefix storage to the main assistant without an unchecked write.
+- Require policy, full candidate review and a justified parent before new important storage; keep pending distinct from unknown actual writes.
+
 ## 0.2.15 — 复审整改（第四轮）：宿主取消贯通回读＋严格 id 契约＋entry.id 三方核验（PR #7 review round 4）
 
 ### Fixed

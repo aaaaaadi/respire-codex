@@ -118,13 +118,13 @@ test('late completion is reported once, is session isolated, and does not replay
   assert.doesNotMatch(text(await handleHook({ ...base, turn_id: 'fourth' }, options)), /save: verified|save: not needed/)
   assert.doesNotMatch(text(await handleHook({ ...base, session_id: 'other' }, options)), /Last save:|Earlier save:/)
 })
-test('skip and explicit writes have accurate concise notices without touching retrieval on skip', async t => {
+test('skip and pending prefix requests have accurate notices without engine calls', async t => {
   const options = await setup(t)
   options.call = () => assert.fail('skip must not call engine')
   assert.match(text(await handleHook({ ...base, prompt: '/nomem hello' }, options)), /Memory: skipped/)
   const explicit = await setup(t, { status: 'ok', summary: { id } })
   const output = text(await handleHook({ ...base, prompt: '记住：项目使用中文' }, explicit))
-  assert.match(output, /Save: unverified/)
+  assert.match(output, /Save: needs review/)
   assert.doesNotMatch(output, /save: verified/)
 })
 
